@@ -2,18 +2,71 @@ using System.Text.Json;
 using Lx.Probe.Model;
 using Lx.Probe.Resolve;
 
-string text = File.ReadAllText("samples/1.20.4.json");
+// 参数：--list（只看版本列表）、--version <id>、--root <安装根目录>。
+// 只给一个位置参数时也当安装根目录（M1/M2 的老用法）。
+string? rootArg = null;
+string? versionArg = null;
+bool listOnly = false;
+
+for (int i = 0; i < args.Length; i++)
+{
+    string arg = args[i];
+    if (arg == "--list")
+    {
+        listOnly = true;
+    }
+    else if (arg == "--version" && i + 1 < args.Length)
+    {
+        versionArg = args[++i];
+    }
+    else if (arg == "--root" && i + 1 < args.Length)
+    {
+        rootArg = args[++i];
+    }
+    else if (!arg.StartsWith("--", StringComparison.Ordinal))
+    {
+        rootArg ??= arg;
+    }
+}
+
+string installRoot = Path.GetFullPath(rootArg ?? "minecraft");
+VersionManifest manifest = await ManifestService.EnsureManifestAsync(installRoot);
+
+if (listOnly)
+{
+    Console.WriteLine($"最新 release = {manifest.Latest?.Release}，最新 snapshot = {manifest.Latest?.Snapshot}");
+    Console.WriteLine($"共 {manifest.Versions?.Count ?? 0} 个版本，最近 20 个：");
+    foreach (ManifestVersion version in (manifest.Versions ?? new List<ManifestVersion>()).Take(20))
+    {
+        Console.WriteLine($"  {version.Id,-18} {version.Type,-10} {version.ReleaseTime:yyyy-MM-dd}");
+    }
+
+    return 0;
+}
+
+string versionId = versionArg ?? "1.20.4";
+string versionJsonPath;
+try
+{
+    versionJsonPath = await ManifestService.EnsureVersionJsonAsync(manifest, versionId, installRoot);
+}
+catch (InvalidOperationException ex)
+{
+    Console.WriteLine($"[错误] {ex.Message}");
+    return 1;
+}
 
 var options = new JsonSerializerOptions();
 options.PropertyNameCaseInsensitive = true;
 
-VersionJson v = JsonSerializer.Deserialize<VersionJson>(text, options)!;
+VersionJson v = JsonSerializer.Deserialize<VersionJson>(File.ReadAllText(versionJsonPath), options)!;
 var features = new Dictionary<string, bool>();
 
 Console.WriteLine($"id = {v.Id}");
 Console.WriteLine($"mainClass = {v.MainClass}");
 Console.WriteLine($"assets = {v.Assets}");
 Console.WriteLine($"java = {v.JavaVersion?.MajorVersion}");
+Console.WriteLine($"version.json = {versionJsonPath}");
 
 // Step 3：只打印数量（1.20.4 应为 88）和前 3 个 name。
 List<Library>? libraries = v.Libraries;
@@ -24,30 +77,25 @@ foreach (Library lib in (libraries ?? new List<Library>()).Take(3))
 }
 
 // M2 Step 1：只算清单，不下载。
-List<DownloadItem> manifest = DownloadManifest.Build(v, v.Id ?? "1.20.4", features);
-double totalMb = manifest.Sum(i => i.Size) / 1024.0 / 1024.0;
-Console.WriteLine($"清单 = {manifest.Count} 个文件，合计 {totalMb:F1} MB");
-foreach (DownloadItem item in manifest.Take(3))
+List<DownloadItem> manifestItems = DownloadManifest.Build(v, versionId, features);
+double totalMb = manifestItems.Sum(i => i.Size) / 1024.0 / 1024.0;
+Console.WriteLine($"清单 = {manifestItems.Count} 个文件，合计 {totalMb:F1} MB");
+foreach (DownloadItem item in manifestItems.Take(3))
 {
     Console.WriteLine($"  {item.RelativePath}");
 }
 Console.WriteLine();
 
 // Step 5：拼 classpath（只打印，不下载）。
-// 第 1 个参数 = 游戏安装根目录（libraries / assets / versions 在它下面），第 2 个 = 存档与 natives 所在的游戏目录。
-string versionId = v.Id ?? "1.20.4";
-string installRoot = Path.GetFullPath(args.Length > 0 ? args[0] : "minecraft");
 // 版本隔离：存档、natives、日志都放 versions/<id>/ 下，不污染安装根目录。
-string gameRoot = args.Length > 1
-    ? Path.GetFullPath(args[1])
-    : Path.Combine(installRoot, "versions", versionId);
+string gameRoot = Path.Combine(installRoot, "versions", versionId);
 string librariesDir = Path.Combine(installRoot, "libraries");
 string assetsDir = Path.Combine(installRoot, "assets");
 string clientJar = Path.Combine(installRoot, "versions", versionId, versionId + ".jar");
-int failed = await Downloader.DownloadAllAsync(manifest, installRoot);
+int failed = await Downloader.DownloadAllAsync(manifestItems, installRoot);
 Console.WriteLine($"下载结果：失败 {failed} 个");
 
-// M2 Step 4：下载 assets（index 已经在上面下过，这里解析后再下 3811 个对象）。
+// M2 Step 4：下载 assets（index 已经在上面下过，这里解析后再下对象）。
 string indexFile = Path.Combine(assetsDir, "indexes", (v.Assets ?? "12") + ".json");
 List<DownloadItem> assets = DownloadManifest.BuildAssets(indexFile);
 Console.WriteLine($"assets 清单 = {assets.Count} 个文件");
@@ -55,7 +103,7 @@ int failedAssets = await Downloader.DownloadAllAsync(assets, installRoot);
 Console.WriteLine($"assets 下载失败 {failedAssets} 个");
 
 // 启动前体检：缺文件就在这里停，别等 java 抛 ClassNotFoundException。
-var allFiles = new List<DownloadItem>(manifest);
+var allFiles = new List<DownloadItem>(manifestItems);
 allFiles.AddRange(assets);
 List<DownloadItem> missingFiles = InstallCheck.FindMissing(allFiles, installRoot);
 Console.WriteLine($"体检：共 {allFiles.Count} 个文件，缺 {missingFiles.Count} 个");
@@ -80,11 +128,6 @@ List<string> classpath = ClasspathBuilder.Build(
 string classpathText = string.Join(";", classpath);
 Console.WriteLine($"classpath entries = {classpath.Count}（library {classpath.Count - 1} + client 1）");
 Console.WriteLine($"classpath length = {classpathText.Length}");
-foreach (string entry in classpath.Take(3))
-{
-    Console.WriteLine($"  {entry}");
-}
-Console.WriteLine($"classpath 全是绝对路径 = {classpath.All(Path.IsPathRooted)}，全是 .jar = {classpath.All(p => p.EndsWith(".jar", StringComparison.OrdinalIgnoreCase))}");
 
 // Step 6：1.20.4 的 natives 是独立的 ":natives-windows" 库，按架构挑出来后解压到 natives/。
 string nativesDir = Path.Combine(gameRoot, "natives");
@@ -97,11 +140,11 @@ Console.WriteLine($"natives jars = {nativeJars.Count}（{NativesExtractor.ArchSu
 Console.WriteLine($"natives dir = {nativesDir}");
 Console.WriteLine($"natives files = {nativeFiles}，dll = {nativeDlls}");
 
-// Step 7：替换 ${...} 占位符，拼出完整命令行（M1 先按离线账号填）。
+// Step 7：替换 ${...} 占位符，拼出完整命令行（先按离线账号填）。
 var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 {
     ["auth_player_name"] = "Player",
-    ["version_name"] = v.Id ?? "1.20.4",
+    ["version_name"] = versionId,
     ["game_directory"] = gameRoot,
     ["assets_root"] = assetsDir,
     ["assets_index_name"] = v.Assets ?? "12",

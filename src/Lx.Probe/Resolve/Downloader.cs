@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 
 namespace Lx.Probe.Resolve;
 
@@ -30,7 +29,7 @@ public static class Downloader
                 string dest = Path.Combine(installRoot, item.RelativePath.Replace('/', Path.DirectorySeparatorChar));
 
                 if (File.Exists(dest) &&
-                    string.Equals(Sha1Of(dest), item.Sha1, StringComparison.OrdinalIgnoreCase))
+                    string.Equals(Hasher.Sha1Of(dest), item.Sha1, StringComparison.OrdinalIgnoreCase))
                 {
                     Interlocked.Increment(ref skipped);
                     return;
@@ -97,7 +96,7 @@ public static class Downloader
                     await body.CopyToAsync(output).ConfigureAwait(false);
                 }
 
-                if (!string.Equals(Sha1Of(temp), item.Sha1, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(Hasher.Sha1Of(temp), item.Sha1, StringComparison.OrdinalIgnoreCase))
                 {
                     Console.WriteLine($"[sha1 不符] {item.Url}");
                     return false;
@@ -122,10 +121,4 @@ public static class Downloader
         return false;
     }
 
-    private static string Sha1Of(string path)
-    {
-        using FileStream stream = File.OpenRead(path);
-        byte[] hash = SHA1.HashData(stream);
-        return Convert.ToHexString(hash).ToLowerInvariant();
-    }
 }
