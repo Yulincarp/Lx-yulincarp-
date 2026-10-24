@@ -115,8 +115,51 @@ public static class JavaRuntime
         }
     }
 
+    // 列出本机找到的所有 java（设置页用）。
+    public static List<(string Path, int? Major)> Discover()
+    {
+        var result = new List<(string Path, int? Major)>();
+        foreach (string candidate in CollectCandidates().Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!File.Exists(candidate))
+            {
+                continue;
+            }
+
+            int? major = GetMajorVersion(candidate);
+            result.Add((candidate, major));
+        }
+
+        return result
+            .OrderByDescending(item => item.Major ?? 0)
+            .ThenBy(item => item.Path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     // 在 JAVA_HOME、PATH、常见安装目录里找符合主版本的 java。
     private static string? FindInstalled(int requiredMajor, Action<string> log)
+    {
+        var candidates = CollectCandidates();
+
+        foreach (string candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!File.Exists(candidate))
+            {
+                continue;
+            }
+
+            int? major = GetMajorVersion(candidate);
+            if (major == requiredMajor)
+            {
+                log($"使用本机 Java {major}：{candidate}");
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private static List<string> CollectCandidates()
     {
         var candidates = new List<string>();
 
@@ -162,22 +205,7 @@ public static class JavaRuntime
             }
         }
 
-        foreach (string candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            if (!File.Exists(candidate))
-            {
-                continue;
-            }
-
-            int? major = GetMajorVersion(candidate);
-            if (major == requiredMajor)
-            {
-                log($"使用本机 Java {major}：{candidate}");
-                return candidate;
-            }
-        }
-
-        return null;
+        return candidates;
     }
 
     private static string? FindOnPath(string exeName)

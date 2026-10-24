@@ -178,8 +178,29 @@ public static class LaunchPipeline
         }
 
         List<string> gameArgs = ArgumentExpander.Expand(version.Arguments?.Game, values, features);
+        LaunchSettings settings = SettingsStore.Load(installRoot);
+
+        if (settings.MaxMemoryMb > 0 && !jvmArgs.Any(arg => arg.StartsWith("-Xmx", StringComparison.OrdinalIgnoreCase)))
+        {
+            jvmArgs.Insert(0, $"-Xmx{settings.MaxMemoryMb}M");
+        }
+
+        if (settings.MinMemoryMb > 0 && !jvmArgs.Any(arg => arg.StartsWith("-Xms", StringComparison.OrdinalIgnoreCase)))
+        {
+            jvmArgs.Insert(0, $"-Xms{settings.MinMemoryMb}M");
+        }
+
         int javaMajor = version.JavaVersion?.MajorVersion ?? 8;
-        string javaExe = await JavaRuntime.EnsureJavaAsync(installRoot, javaMajor, version.JavaVersion?.Component, log).ConfigureAwait(false);
+        string javaExe;
+        if (!string.IsNullOrWhiteSpace(settings.JavaPath) && File.Exists(settings.JavaPath))
+        {
+            javaExe = settings.JavaPath;
+            log($"使用设置里指定的 Java：{javaExe}");
+        }
+        else
+        {
+            javaExe = await JavaRuntime.EnsureJavaAsync(installRoot, javaMajor, version.JavaVersion?.Component, log).ConfigureAwait(false);
+        }
         string commandLine = CommandLineBuilder.Build(javaExe, jvmArgs, version.MainClass ?? string.Empty, gameArgs);
 
         return new LaunchResult(versionId, gameRoot, commandLine, manifestItems.Count, assets.Count, javaExe);

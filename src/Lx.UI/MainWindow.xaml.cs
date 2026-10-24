@@ -112,6 +112,16 @@ public partial class MainWindow : Window
         }
     }
 
+    private void Settings_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SettingsWindow(_installRoot) { Owner = this };
+        if (dialog.ShowDialog() == true)
+        {
+            LaunchSettings settings = SettingsStore.Load(_installRoot);
+            Log($"设置已保存：内存 {settings.MinMemoryMb}-{settings.MaxMemoryMb} MB，Java {(settings.JavaPath ?? "自动")}");
+        }
+    }
+
     private async void SwitchRole_Click(object sender, RoutedEventArgs e)
     {
         if (AccountBox.SelectedItem is not Account account)
