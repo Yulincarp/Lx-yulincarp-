@@ -207,7 +207,7 @@ public partial class MainWindow : Window
     {
         var dialog = new OpenFileDialog
         {
-            Filter = "Modrinth 整合包 (*.mrpack)|*.mrpack",
+            Filter = "整合包 (*.mrpack;*.zip;*.rar;*.7z;*.tar)|*.mrpack;*.zip;*.rar;*.7z;*.tar",
             Title = "选择整合包",
         };
 
@@ -218,7 +218,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var imported = await MrpackInstaller.ImportAsync(
+            var imported = await PackImporter.ImportAsync(
                 dialog.FileName,
                 _installRoot,
                 message => Dispatcher.Invoke(() => Log(message)));

@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using Lx.Probe.Instances;
 using Lx.Probe.Modpacks;
 
 namespace Lx.Tests;
@@ -69,6 +70,93 @@ public class ModpackTests
             }
 
             Assert.Throws<InvalidOperationException>(() => MrpackInstaller.ReadIndex(path));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+}
+
+public class PackImporterTests
+{
+    private static string TempDir()
+    {
+        string dir = Path.Combine(AppContext.BaseDirectory, "packs-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    private static void AddEntry(ZipArchive zip, string name, string content)
+    {
+        ZipArchiveEntry entry = zip.CreateEntry(name);
+        using var writer = new StreamWriter(entry.Open());
+        writer.Write(content);
+    }
+
+    [Fact]
+    public void DetectKind_RecognizesModrinthCurseForgeAndGeneric()
+    {
+        string dir = TempDir();
+        try
+        {
+            string modrinth = Path.Combine(dir, "a.mrpack");
+            using (var zip = ZipFile.Open(modrinth, ZipArchiveMode.Create))
+            {
+                AddEntry(zip, "modrinth.index.json", "{}");
+            }
+
+            string curseforge = Path.Combine(dir, "b.zip");
+            using (var zip = ZipFile.Open(curseforge, ZipArchiveMode.Create))
+            {
+                AddEntry(zip, "manifest.json", "{}");
+                AddEntry(zip, "overrides/config/x.txt", "x");
+            }
+
+            string generic = Path.Combine(dir, "c.zip");
+            using (var zip = ZipFile.Open(generic, ZipArchiveMode.Create))
+            {
+                AddEntry(zip, "mods/a.jar", "x");
+            }
+
+            Assert.Equal(PackKind.Modrinth, PackImporter.DetectKind(modrinth));
+            Assert.Equal(PackKind.CurseForge, PackImporter.DetectKind(curseforge));
+            Assert.Equal(PackKind.Generic, PackImporter.DetectKind(generic));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ImportGeneric_StripsSingleRootAndGuessesVersion()
+    {
+        string dir = TempDir();
+        string installRoot = Path.Combine(dir, "install");
+        try
+        {
+            string pack = Path.Combine(dir, "pack.zip");
+            using (var zip = ZipFile.Open(pack, ZipArchiveMode.Create))
+            {
+                AddEntry(zip, "MyPack/fabric.mod.json", "{\"id\":\"x\",\"depends\":{\"minecraft\":\"1.20.1\"}}");
+            }
+
+            // 把 fabric.mod.json 放进 mods/ 才会有版本猜测
+            string pack2 = Path.Combine(dir, "pack2.zip");
+            using (var zip = ZipFile.Open(pack2, ZipArchiveMode.Create))
+            {
+                using Stream entryStream = zip.CreateEntry("MyPack/mods/example.jar").Open();
+                using var inner = new ZipArchive(entryStream, ZipArchiveMode.Create, leaveOpen: true);
+                AddEntry(inner, "fabric.mod.json", "{\"id\":\"example\",\"depends\":{\"minecraft\":\"1.20.1\"}}");
+            }
+
+            Instance imported = await PackImporter.ImportAsync(pack2, installRoot, _ => { });
+
+            Assert.Equal("MyPack", imported.Name);
+            Assert.Equal("1.20.1", imported.VersionId);
+            Assert.Equal("fabric", imported.Loader);
+            Assert.True(File.Exists(Path.Combine(installRoot, "instances", "MyPack", "mods", "example.jar")));
         }
         finally
         {

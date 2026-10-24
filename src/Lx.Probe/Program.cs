@@ -131,7 +131,7 @@ if (importArg is not null)
 {
     try
     {
-        Instance imported = await MrpackInstaller.ImportAsync(importArg, installRoot, Console.WriteLine);
+        Instance imported = await PackImporter.ImportAsync(importArg, installRoot, Console.WriteLine);
         Console.WriteLine($"导入完成：{imported.Name}（{imported.VersionId}）");
         return 0;
     }
