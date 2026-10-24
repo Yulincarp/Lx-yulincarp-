@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Lx.Probe.Auth;
 using Lx.Probe.Model;
+using Lx.Probe.Mods;
 using Lx.Probe.Resolve;
 
 // 参数：--list（只看版本列表）、--version <id>、--root <安装根目录>。
@@ -19,11 +20,26 @@ string? accountArg = null;
 string? clientIdArg = null;
 string? loaderArg = null;
 string? loaderVersionArg = null;
+string? gameDirArg = null;
+string? modsAction = null;
+string? modsTarget = null;
 
 for (int i = 0; i < args.Length; i++)
 {
     string arg = args[i];
-    if (arg == "--loader" && i + 1 < args.Length)
+    if (arg == "--game-dir" && i + 1 < args.Length)
+    {
+        gameDirArg = args[++i];
+    }
+    else if (arg == "--mods" && i + 1 < args.Length)
+    {
+        modsAction = args[++i].ToLowerInvariant();
+        if (modsAction != "list" && i + 1 < args.Length)
+        {
+            modsTarget = args[++i];
+        }
+    }
+    else if (arg == "--loader" && i + 1 < args.Length)
     {
         loaderArg = args[++i];
     }
@@ -104,6 +120,11 @@ if (listAccounts)
 
     return 0;
 }
+if (modsAction is not null)
+{
+    return RunMods(modsAction, modsTarget, gameDirArg ?? Path.Combine(installRoot, "versions", versionArg ?? "1.20.4"));
+}
+
 VersionManifest manifest = await ManifestService.EnsureManifestAsync(installRoot);
 
 if (listOnly)
@@ -261,7 +282,9 @@ Console.WriteLine();
 
 // Step 5：拼 classpath（只打印，不下载）。
 // 版本隔离：存档、natives、日志都放 versions/<id>/ 下，不污染安装根目录。
-string gameRoot = Path.Combine(installRoot, "versions", versionId);
+string gameRoot = gameDirArg is not null
+    ? Path.GetFullPath(gameDirArg)
+    : Path.Combine(installRoot, "versions", versionId);
 string librariesDir = Path.Combine(installRoot, "libraries");
 string assetsDir = Path.Combine(installRoot, "assets");
 string clientVersionId = v.InheritsFrom ?? versionId;
@@ -371,3 +394,74 @@ string printable = account.AccessToken.Length > 4 && account.AccessToken != "0"
 Console.WriteLine(printable);
 
 return 0;
+
+// mods 子命令：list / enable / disable / add / remove
+static int RunMods(string action, string? target, string gameDir)
+{
+    Console.WriteLine($"mods 目录：{ModManager.ModsDir(gameDir)}");
+
+    switch (action)
+    {
+        case "list":
+            List<ModFile> mods = ModManager.List(gameDir);
+            if (mods.Count == 0)
+            {
+                Console.WriteLine("（空）");
+                return 0;
+            }
+
+            foreach (ModFile mod in mods)
+            {
+                string state = mod.Enabled ? "启用" : "禁用";
+                Console.WriteLine($"  [{state}] {mod.Name ?? mod.FileName} {mod.Version}  ({mod.FileName}, {mod.Size / 1024} KB)");
+            }
+
+            return 0;
+
+        case "enable":
+        case "disable":
+            if (target is null)
+            {
+                Console.WriteLine("[错误] 需要文件名，例如 --mods disable sodium.jar");
+                return 1;
+            }
+
+            bool updated = ModManager.SetEnabled(gameDir, target, action == "enable");
+            Console.WriteLine(updated ? "已更新" : "[错误] 找不到这个 mod");
+            return updated ? 0 : 1;
+
+        case "add":
+            if (target is null)
+            {
+                Console.WriteLine("[错误] 需要 jar 路径，例如 --mods add C:\\Downloads\\sodium.jar");
+                return 1;
+            }
+
+            try
+            {
+                ModManager.Add(gameDir, target);
+                Console.WriteLine("已添加");
+                return 0;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or IOException)
+            {
+                Console.WriteLine($"[错误] {ex.Message}");
+                return 1;
+            }
+
+        case "remove":
+            if (target is null)
+            {
+                Console.WriteLine("[错误] 需要文件名");
+                return 1;
+            }
+
+            bool removed = ModManager.Remove(gameDir, target);
+            Console.WriteLine(removed ? "已删除" : "[错误] 找不到这个 mod");
+            return removed ? 0 : 1;
+
+        default:
+            Console.WriteLine("[错误] --mods 支持 list / enable / disable / add / remove");
+            return 1;
+    }
+}
