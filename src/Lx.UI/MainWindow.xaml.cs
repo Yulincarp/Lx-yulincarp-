@@ -640,7 +640,7 @@ public partial class MainWindow : Window
                 progress);
 
             Log($"命令行：{result.CommandLine.Length} 字符");
-            StartGame(result.CommandLine);
+            StartGame(result);
             Progress.Value = Progress.Maximum;
             StatusText.Text = "已启动";
             RefreshMods();
@@ -656,11 +656,17 @@ public partial class MainWindow : Window
         }
     }
 
-    private void StartGame(string commandLine)
+    private void StartGame(LaunchResult result)
     {
-        var info = new ProcessStartInfo("java")
+        int prefixEnd = result.CommandLine.StartsWith('"')
+            ? result.CommandLine.IndexOf('"', 1) + 1
+            : result.JavaPath.Length;
+
+        string arguments = result.CommandLine[prefixEnd..].TrimStart();
+
+        var info = new ProcessStartInfo(result.JavaPath)
         {
-            Arguments = commandLine["java ".Length..],
+            Arguments = arguments,
             UseShellExecute = false,
         };
 

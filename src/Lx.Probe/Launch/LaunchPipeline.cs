@@ -22,7 +22,8 @@ public sealed record LaunchResult(
     string GameDir,
     string CommandLine,
     int ManifestCount,
-    int AssetCount);
+    int AssetCount,
+    string JavaPath);
 
 // 完整的启动流程：解析版本 -> 合并 loader -> 下载 -> 体检 -> 拼命令行。
 // 不直接启动 java，交给调用方（控制台打印，界面可以 Process.Start）。
@@ -144,6 +145,14 @@ public static class LaunchPipeline
 
         List<string> jvmArgs = ArgumentExpander.Expand(version.Arguments?.Jvm, values, features);
 
+        // 这台机器的 %TEMP% 不可写（ImageIO / 部分 mod 会崩），统一指到安装目录里。
+        string javaTemp = Path.Combine(installRoot, ".tmp", "java");
+        Directory.CreateDirectory(javaTemp);
+        if (!jvmArgs.Any(arg => arg.StartsWith("-Djava.io.tmpdir=", StringComparison.OrdinalIgnoreCase)))
+        {
+            jvmArgs.Insert(0, $"-Djava.io.tmpdir={javaTemp}");
+        }
+
         // Forge/NeoForge 用 -DignoreList 决定哪些 classpath jar 不参与模块化。
         // 官方启动器靠 ${version_name}.jar 忽略原版客户端 jar；我们 --version 用的是 loader 的 id，
         // 所以把它显式追加进去，避免和补丁版 client 的模块冲突。
@@ -169,8 +178,10 @@ public static class LaunchPipeline
         }
 
         List<string> gameArgs = ArgumentExpander.Expand(version.Arguments?.Game, values, features);
-        string commandLine = CommandLineBuilder.Build("java", jvmArgs, version.MainClass ?? string.Empty, gameArgs);
+        int javaMajor = version.JavaVersion?.MajorVersion ?? 8;
+        string javaExe = await JavaRuntime.EnsureJavaAsync(installRoot, javaMajor, version.JavaVersion?.Component, log).ConfigureAwait(false);
+        string commandLine = CommandLineBuilder.Build(javaExe, jvmArgs, version.MainClass ?? string.Empty, gameArgs);
 
-        return new LaunchResult(versionId, gameRoot, commandLine, manifestItems.Count, assets.Count);
+        return new LaunchResult(versionId, gameRoot, commandLine, manifestItems.Count, assets.Count, javaExe);
     }
 }
