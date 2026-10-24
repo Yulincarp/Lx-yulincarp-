@@ -485,3 +485,8 @@ $RECYCLE.BIN/
 
 # 下载的游戏文件（libraries / natives / versions），不入库
 minecraft/
+
+# 生成的启动产物与抓到的命令行（含登录 token），不入库
+cmd.txt
+official-cmd.txt
+launch-*.log

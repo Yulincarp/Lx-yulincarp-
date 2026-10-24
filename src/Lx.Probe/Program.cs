@@ -23,10 +23,13 @@ foreach (Library lib in (libraries ?? new List<Library>()).Take(3))
     Console.WriteLine($"  name = {lib.Name}");
 }
 
-// Step 5：拼 classpath（只打印，不下载）。游戏根目录先用 Lx/minecraft。
-string gameRoot = Path.GetFullPath("minecraft");
-string librariesDir = Path.Combine(gameRoot, "libraries");
-string clientJar = Path.Combine(gameRoot, "versions", "1.20.4", "1.20.4.jar");
+// Step 5：拼 classpath（只打印，不下载）。
+// 第 1 个参数 = 游戏安装根目录（libraries / assets / versions 在它下面），第 2 个 = 存档与 natives 所在的游戏目录。
+string installRoot = Path.GetFullPath(args.Length > 0 ? args[0] : "minecraft");
+string gameRoot = Path.GetFullPath(args.Length > 1 ? args[1] : "minecraft");
+string librariesDir = Path.Combine(installRoot, "libraries");
+string assetsDir = Path.Combine(installRoot, "assets");
+string clientJar = Path.Combine(installRoot, "versions", "1.20.4", "1.20.4.jar");
 
 List<string> classpath = ClasspathBuilder.Build(
     libraries ?? new List<Library>(),
@@ -60,7 +63,7 @@ var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     ["auth_player_name"] = "Player",
     ["version_name"] = v.Id ?? "1.20.4",
     ["game_directory"] = gameRoot,
-    ["assets_root"] = Path.Combine(gameRoot, "assets"),
+    ["assets_root"] = assetsDir,
     ["assets_index_name"] = v.Assets ?? "12",
     ["auth_uuid"] = "00000000000000000000000000000000",
     ["auth_access_token"] = "0",
