@@ -13,11 +13,16 @@ string? apiArg = null;
 string? emailArg = null;
 bool listOnly = false;
 bool debug = false;
+bool relogin = false;
 
 for (int i = 0; i < args.Length; i++)
 {
     string arg = args[i];
-    if (arg == "--debug")
+    if (arg == "--relogin")
+    {
+        relogin = true;
+    }
+    else if (arg == "--debug")
     {
         debug = true;
     }
@@ -90,9 +95,26 @@ switch (authType)
         account = OfflineAuth.Create(nameArg ?? "Player");
         break;
     case "yggdrasil":
-        if (apiArg is null || emailArg is null)
+        if (apiArg is null)
         {
-            Console.WriteLine("[错误] 外置登录需要 --api <站点根> 和 --email <账号>");
+            Console.WriteLine("[错误] 外置登录需要 --api <站点根>");
+            return 1;
+        }
+
+        Account? cached = relogin
+            ? null
+            : AccountStore.Load(installRoot).FirstOrDefault(a =>
+                a.Type == "yggdrasil" &&
+                string.Equals(a.ApiRoot, apiArg, StringComparison.OrdinalIgnoreCase));
+        if (cached is not null)
+        {
+            account = cached;
+            break;
+        }
+
+        if (emailArg is null)
+        {
+            Console.WriteLine("[错误] 外置登录需要 --email <账号>");
             return 1;
         }
         string password = ConsolePrompt.ReadPassword("密码（不会保存）：");
