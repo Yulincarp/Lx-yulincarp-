@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Lx.Probe.Model;
+using Lx.Probe.Resolve;
 
 string text = File.ReadAllText("samples/1.20.4.json");
 
@@ -23,3 +24,24 @@ if (libraries is { Count: > 0 })
         Console.WriteLine($"  name = {lib.Name}");
     }
 }
+
+// Step 5：拼 classpath（只打印，不下载）。游戏根目录先用 Lx/minecraft。
+string gameRoot = Path.GetFullPath("minecraft");
+string librariesDir = Path.Combine(gameRoot, "libraries");
+string clientJar = Path.Combine(gameRoot, "versions", "1.20.4", "1.20.4.jar");
+
+List<string> classpath = ClasspathBuilder.Build(
+    libraries ?? new List<Library>(),
+    librariesDir,
+    clientJar,
+    new Dictionary<string, bool>());
+
+string classpathText = string.Join(";", classpath);
+Console.WriteLine($"classpath entries = {classpath.Count}（library {classpath.Count - 1} + client 1）");
+Console.WriteLine($"classpath length = {classpathText.Length}");
+foreach (string entry in classpath.Take(3))
+{
+    Console.WriteLine($"  {entry}");
+}
+
+Console.WriteLine($"classpath 全是绝对路径 = {classpath.All(Path.IsPathRooted)}，全是 .jar = {classpath.All(p => p.EndsWith(".jar", StringComparison.OrdinalIgnoreCase))}");
