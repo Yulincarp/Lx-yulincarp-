@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Lx.Probe.Auth;
 using Lx.Probe.Model;
 using Lx.Probe.Resolve;
 
@@ -6,6 +7,8 @@ using Lx.Probe.Resolve;
 // 只给一个位置参数时也当安装根目录（M1/M2 的老用法）。
 string? rootArg = null;
 string? versionArg = null;
+string? authArg = null;
+string? nameArg = null;
 bool listOnly = false;
 
 for (int i = 0; i < args.Length; i++)
@@ -22,6 +25,14 @@ for (int i = 0; i < args.Length; i++)
     else if (arg == "--root" && i + 1 < args.Length)
     {
         rootArg = args[++i];
+    }
+    else if (arg == "--auth" && i + 1 < args.Length)
+    {
+        authArg = args[++i];
+    }
+    else if (arg == "--name" && i + 1 < args.Length)
+    {
+        nameArg = args[++i];
     }
     else if (!arg.StartsWith("--", StringComparison.Ordinal))
     {
@@ -55,6 +66,21 @@ catch (InvalidOperationException ex)
     Console.WriteLine($"[错误] {ex.Message}");
     return 1;
 }
+
+string authType = authArg ?? "offline";
+Account account;
+switch (authType)
+{
+    case "offline":
+        account = OfflineAuth.Create(nameArg ?? "Player");
+        break;
+    default:
+        Console.WriteLine($"[错误] 暂不支持的登录方式：{authType}（目前只有 offline）");
+        return 1;
+}
+
+AccountStore.Save(installRoot, account);
+Console.WriteLine($"账号：{account.Type} {account.Name} {account.Uuid}");
 
 var options = new JsonSerializerOptions();
 options.PropertyNameCaseInsensitive = true;
@@ -143,14 +169,14 @@ Console.WriteLine($"natives files = {nativeFiles}，dll = {nativeDlls}");
 // Step 7：替换 ${...} 占位符，拼出完整命令行（先按离线账号填）。
 var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 {
-    ["auth_player_name"] = "Player",
+    ["auth_player_name"] = account.Name,
     ["version_name"] = versionId,
     ["game_directory"] = gameRoot,
     ["assets_root"] = assetsDir,
     ["assets_index_name"] = v.Assets ?? "12",
-    ["auth_uuid"] = "00000000000000000000000000000000",
-    ["auth_access_token"] = "0",
-    ["user_type"] = "legacy",
+    ["auth_uuid"] = account.Uuid,
+    ["auth_access_token"] = account.AccessToken,
+    ["user_type"] = account.Type == "microsoft" ? "msa" : "legacy",
     ["version_type"] = "release",
     ["natives_directory"] = nativesDir,
     ["launcher_name"] = "lx",
@@ -173,6 +199,9 @@ Console.WriteLine(
     $"含 mainClass = {commandLine.Contains("net.minecraft.client.main.Main", StringComparison.Ordinal)}，" +
     $"还有占位符 = {commandLine.Contains("${", StringComparison.Ordinal)}");
 Console.WriteLine();
-Console.WriteLine(commandLine);
+string printable = account.AccessToken.Length > 4 && account.AccessToken != "0"
+    ? commandLine.Replace(account.AccessToken, "***", StringComparison.Ordinal)
+    : commandLine;
+Console.WriteLine(printable);
 
 return 0;
