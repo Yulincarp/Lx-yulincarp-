@@ -35,11 +35,15 @@ Console.WriteLine();
 
 // Step 5：拼 classpath（只打印，不下载）。
 // 第 1 个参数 = 游戏安装根目录（libraries / assets / versions 在它下面），第 2 个 = 存档与 natives 所在的游戏目录。
+string versionId = v.Id ?? "1.20.4";
 string installRoot = Path.GetFullPath(args.Length > 0 ? args[0] : "minecraft");
-string gameRoot = Path.GetFullPath(args.Length > 1 ? args[1] : "minecraft");
+// 版本隔离：存档、natives、日志都放 versions/<id>/ 下，不污染安装根目录。
+string gameRoot = args.Length > 1
+    ? Path.GetFullPath(args[1])
+    : Path.Combine(installRoot, "versions", versionId);
 string librariesDir = Path.Combine(installRoot, "libraries");
 string assetsDir = Path.Combine(installRoot, "assets");
-string clientJar = Path.Combine(installRoot, "versions", "1.20.4", "1.20.4.jar");
+string clientJar = Path.Combine(installRoot, "versions", versionId, versionId + ".jar");
 int failed = await Downloader.DownloadAllAsync(manifest, installRoot);
 Console.WriteLine($"下载结果：失败 {failed} 个");
 
@@ -49,6 +53,23 @@ List<DownloadItem> assets = DownloadManifest.BuildAssets(indexFile);
 Console.WriteLine($"assets 清单 = {assets.Count} 个文件");
 int failedAssets = await Downloader.DownloadAllAsync(assets, installRoot);
 Console.WriteLine($"assets 下载失败 {failedAssets} 个");
+
+// 启动前体检：缺文件就在这里停，别等 java 抛 ClassNotFoundException。
+var allFiles = new List<DownloadItem>(manifest);
+allFiles.AddRange(assets);
+List<DownloadItem> missingFiles = InstallCheck.FindMissing(allFiles, installRoot);
+Console.WriteLine($"体检：共 {allFiles.Count} 个文件，缺 {missingFiles.Count} 个");
+if (missingFiles.Count > 0)
+{
+    Console.WriteLine("缺少以下文件，先补齐再启动：");
+    foreach (DownloadItem item in missingFiles.Take(10))
+    {
+        Console.WriteLine($"  {item.RelativePath}");
+        Console.WriteLine($"    {item.Url}");
+    }
+
+    return 1;
+}
 
 List<string> classpath = ClasspathBuilder.Build(
     libraries ?? new List<Library>(),
@@ -110,3 +131,5 @@ Console.WriteLine(
     $"还有占位符 = {commandLine.Contains("${", StringComparison.Ordinal)}");
 Console.WriteLine();
 Console.WriteLine(commandLine);
+
+return 0;
