@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Lx.Probe.Model;
 
 namespace Lx.Probe.Auth;
@@ -15,7 +16,7 @@ public static class YggdrasilAuth
         PropertyNameCaseInsensitive = true,
     };
 
-    public static async Task<Account> LoginAsync(string apiRoot, string username, string password)
+    public static async Task<Account> LoginAsync(string apiRoot, string username, string password, bool debug = false)
     {
         apiRoot = apiRoot.TrimEnd('/');
         string url = apiRoot + "/authserver/authenticate";
@@ -32,23 +33,37 @@ public static class YggdrasilAuth
         using HttpResponseMessage response = await Http.PostAsJsonAsync(url, payload).ConfigureAwait(false);
         string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
+        if (debug)
+        {
+            Console.WriteLine("[debug] 响应：" + Redact(body));
+        }
+
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException(DescribeError(body, response.StatusCode));
         }
 
         AuthenticateResponse? result = JsonSerializer.Deserialize<AuthenticateResponse>(body, JsonOptions);
-        if (result?.AccessToken is null ||
-            result.SelectedProfile?.Id is null ||
-            result.SelectedProfile.Name is null)
+        if (result?.AccessToken is null)
         {
-            throw new InvalidOperationException("登录成功但没拿到 selectedProfile（账号可能还没创建角色）");
+            throw new InvalidOperationException("登录成功但响应里没有 accessToken");
+        }
+
+        Profile? profile = result.SelectedProfile ?? result.AvailableProfiles?.FirstOrDefault();
+        if (profile?.Id is null || profile.Name is null)
+        {
+            throw new InvalidOperationException("这个账号在站点上没有任何角色，先去 LittleSkin 建一个角色");
+        }
+
+        if (result.SelectedProfile is null)
+        {
+            Console.WriteLine($"[提示] 服务端没返回默认角色，先用 availableProfiles 里的第一个：{profile.Name}");
         }
 
         return new Account(
             "yggdrasil",
-            result.SelectedProfile.Name,
-            result.SelectedProfile.Id.Replace("-", string.Empty, StringComparison.Ordinal),
+            profile.Name,
+            profile.Id.Replace("-", string.Empty, StringComparison.Ordinal),
             result.AccessToken,
             apiRoot);
     }
@@ -81,6 +96,7 @@ public static class YggdrasilAuth
         public string? AccessToken { get; set; }
         public string? ClientToken { get; set; }
         public Profile? SelectedProfile { get; set; }
+        public List<Profile>? AvailableProfiles { get; set; }
     }
 
     private sealed class Profile
@@ -88,6 +104,10 @@ public static class YggdrasilAuth
         public string? Id { get; set; }
         public string? Name { get; set; }
     }
+
+    // 把 accessToken 打码，方便把响应贴出来排查。
+    private static string Redact(string json) =>
+        Regex.Replace(json, @"(""accessToken""\s*:\s*"")[^""]+", "$1***");
 
     private sealed class ErrorResponse
     {

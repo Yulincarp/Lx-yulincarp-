@@ -12,11 +12,16 @@ string? nameArg = null;
 string? apiArg = null;
 string? emailArg = null;
 bool listOnly = false;
+bool debug = false;
 
 for (int i = 0; i < args.Length; i++)
 {
     string arg = args[i];
-    if (arg == "--list")
+    if (arg == "--debug")
+    {
+        debug = true;
+    }
+    else if (arg == "--list")
     {
         listOnly = true;
     }
@@ -93,7 +98,7 @@ switch (authType)
         string password = ConsolePrompt.ReadPassword("密码（不会保存）：");
         try
         {
-            account = await YggdrasilAuth.LoginAsync(apiArg, emailArg, password);
+            account = await YggdrasilAuth.LoginAsync(apiArg, emailArg, password, debug);
         }
         catch (InvalidOperationException ex)
         {
