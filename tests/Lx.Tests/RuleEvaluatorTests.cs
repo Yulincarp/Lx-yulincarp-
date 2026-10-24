@@ -43,4 +43,13 @@ public class RuleEvaluatorTests
 
         Assert.False(RuleEvaluator.IsAllowed(rules, features));
     }
+
+    [Fact]
+    public void ArchMismatch_RuleSkipped_IsDenied()
+    {
+        // 1.20.4 的 jvm 参数里有 {"action":"allow","os":{"arch":"x86"}}，64 位机器上要跳过。
+        List<Rule>? rules = Parse("""[{"action":"allow","os":{"arch":"x86"}}]""");
+
+        Assert.False(RuleEvaluator.IsAllowed(rules, new Dictionary<string, bool>(), "x86_64"));
+    }
 }

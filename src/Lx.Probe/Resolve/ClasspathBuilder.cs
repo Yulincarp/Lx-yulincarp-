@@ -20,6 +20,15 @@ public static class ClasspathBuilder
                 continue;
             }
 
+            // 1.20.4 的 rules 不区分 os.arch，natives 的 x86 / arm64 变体会被一起放进来，
+            // 这里按名字只留当前架构的那一个。
+            if (library.Name is { } name &&
+                name.Contains(":natives-", StringComparison.OrdinalIgnoreCase) &&
+                !name.EndsWith(NativesExtractor.ArchSuffix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             string? artifactPath = library.Downloads?.Artifact?.Path;
             if (string.IsNullOrEmpty(artifactPath))
             {

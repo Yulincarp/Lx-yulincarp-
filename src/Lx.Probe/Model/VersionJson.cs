@@ -8,6 +8,7 @@ public class VersionJson
     public string? Assets { get; set; }
     public JavaVersion? JavaVersion { get; set; }
     public List<Library>? Libraries { get; set; }
+    public Arguments? Arguments { get; set; }
 }
 
 public class JavaVersion

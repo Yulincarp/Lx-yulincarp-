@@ -11,4 +11,5 @@ public class Rule
 public class RuleOs
 {
     public string? Name { get; set; }
+    public string? Arch { get; set; }
 }
