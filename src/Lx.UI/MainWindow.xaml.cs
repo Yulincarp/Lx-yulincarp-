@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using Lx.Probe.Auth;
+using Lx.Probe.Instances;
 using Lx.Probe.Launch;
 using Lx.Probe.Model;
 using Lx.Probe.Mods;
@@ -15,6 +16,9 @@ public partial class MainWindow : Window
 {
     // 从 bin 目录往上找 Lx.sln，把 minecraft 定位到仓库根，避免"从哪个目录启动"影响结果。
     private readonly string _installRoot = ResolveInstallRoot();
+
+    private List<ModFile> _allMods = new();
+    private bool _suppressInstanceEvents;
 
     public MainWindow()
     {
@@ -49,7 +53,7 @@ public partial class MainWindow : Window
             VersionBox.SelectedItem = versions.FirstOrDefault(v => v.Id == "1.20.4") ?? versions.FirstOrDefault();
 
             RefreshAccounts();
-            RefreshMods();
+            RefreshInstances();
 
             Log($"安装目录：{_installRoot}");
             Log($"版本清单：{versions.Count} 个");
@@ -107,32 +111,117 @@ public partial class MainWindow : Window
         }
     }
 
-    private void Version_Changed(object sender, RoutedEventArgs e) => RefreshMods();
+    // ---------- 实例 ----------
 
-    private void RefreshMods_Click(object sender, RoutedEventArgs e) => RefreshMods();
-
-    private void RefreshMods()
+    private void RefreshInstances(string? selectName = null)
     {
-        if (ModsList is null)
+        _suppressInstanceEvents = true;
+        List<Instance> instances = InstanceStore.Load(_installRoot);
+        InstancesList.ItemsSource = instances;
+        Instance? target = selectName is null
+            ? instances.FirstOrDefault()
+            : instances.FirstOrDefault(i => i.Name == selectName) ?? instances.FirstOrDefault();
+        InstancesList.SelectedItem = target;
+        _suppressInstanceEvents = false;
+
+        if (target is not null)
+        {
+            ApplyInstance(target);
+        }
+
+        RefreshMods();
+    }
+
+    private void Instances_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressInstanceEvents || InstancesList.SelectedItem is not Instance instance)
         {
             return;
         }
 
-        try
-        {
-            string gameDir = CurrentGameDir();
-            ModsPathText.Text = ModManager.ModsDir(gameDir);
-            ModsList.ItemsSource = ModManager.List(gameDir);
-        }
-        catch (Exception ex)
-        {
-            Log($"[错误] {ex.Message}");
-        }
+        ApplyInstance(instance);
     }
 
-    // 当前版本的游戏目录：Fabric 勾上时优先找已装好的 fabric-loader-*-<版本>。
+    // 实例决定：版本、是否 Fabric、账号；mods 目录也跟着实例走。
+    private void ApplyInstance(Instance instance)
+    {
+        if (VersionBox.ItemsSource is List<ManifestVersion> versions)
+        {
+            ManifestVersion? match = versions.FirstOrDefault(v => v.Id == instance.VersionId);
+            if (match is not null)
+            {
+                VersionBox.SelectedItem = match;
+            }
+        }
+
+        FabricCheck.IsChecked = string.Equals(instance.Loader, "fabric", StringComparison.OrdinalIgnoreCase);
+
+        if (instance.AccountName is not null && AccountBox.ItemsSource is List<Account> accounts)
+        {
+            Account? account = accounts.FirstOrDefault(a => a.Name == instance.AccountName);
+            if (account is not null)
+            {
+                AccountBox.SelectedItem = account;
+            }
+        }
+
+        StatusText.Text = $"实例：{instance.Name}";
+        RefreshMods();
+    }
+
+    private void CreateInstance_Click(object sender, RoutedEventArgs e)
+    {
+        string version = (VersionBox.SelectedItem as ManifestVersion)?.Id ?? "1.20.4";
+        string raw = NewInstanceName.Text.Trim();
+        if (raw.Length == 0)
+        {
+            raw = version + " 实例";
+        }
+
+        string name;
+        try
+        {
+            name = InstanceStore.ValidateName(raw);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Log($"[错误] {ex.Message}");
+            return;
+        }
+
+        var instance = new Instance(
+            name,
+            version,
+            FabricCheck.IsChecked == true ? "fabric" : null,
+            (AccountBox.SelectedItem as Account)?.Name);
+
+        InstanceStore.AddOrUpdate(_installRoot, instance);
+        NewInstanceName.Text = string.Empty;
+        RefreshInstances(name);
+        Log($"已创建实例：{name}（{version}）→ {InstanceStore.DirFor(_installRoot, name)}");
+    }
+
+    private void DeleteInstance_Click(object sender, RoutedEventArgs e)
+    {
+        if (InstancesList.SelectedItem is not Instance instance)
+        {
+            Log("先选中一个实例");
+            return;
+        }
+
+        InstanceStore.Remove(_installRoot, instance.Name);
+        RefreshInstances();
+        Log($"已删除实例记录：{instance.Name}（文件保留在 {InstanceStore.DirFor(_installRoot, instance.Name)}）");
+    }
+
+    // 当前实例的游戏目录；没有实例时退回"版本目录"。
     private string CurrentGameDir()
     {
+        if (InstancesList?.SelectedItem is Instance instance)
+        {
+            return InstanceStore.DirFor(_installRoot, instance.Name);
+        }
+
         string version = (VersionBox.SelectedItem as ManifestVersion)?.Id ?? "1.20.4";
         string versionsDir = Path.Combine(_installRoot, "versions");
 
@@ -148,6 +237,65 @@ public partial class MainWindow : Window
         }
 
         return Path.Combine(versionsDir, version);
+    }
+
+    private void Version_Changed(object sender, RoutedEventArgs e) => RefreshMods();
+
+    // ---------- mods ----------
+
+    private void RefreshMods_Click(object sender, RoutedEventArgs e) => RefreshMods();
+
+    private void RefreshMods()
+    {
+        if (ModsList is null)
+        {
+            return;
+        }
+
+        try
+        {
+            string gameDir = CurrentGameDir();
+            Directory.CreateDirectory(ModManager.ModsDir(gameDir));
+            ModsPathText.Text = ModManager.ModsDir(gameDir);
+            _allMods = ModManager.List(gameDir);
+            ApplyModFilter();
+        }
+        catch (Exception ex)
+        {
+            Log($"[错误] {ex.Message}");
+        }
+    }
+
+    private void ModSearch_Changed(object sender, TextChangedEventArgs e) => ApplyModFilter();
+
+    private void ModSort_Changed(object sender, SelectionChangedEventArgs e) => ApplyModFilter();
+
+    private void ApplyModFilter()
+    {
+        if (ModsList is null)
+        {
+            return;
+        }
+
+        string query = ModSearch?.Text?.Trim() ?? string.Empty;
+        IEnumerable<ModFile> filtered = _allMods;
+
+        if (query.Length > 0)
+        {
+            filtered = filtered.Where(mod =>
+                mod.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                mod.FileName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                (mod.Id ?? string.Empty).Contains(query, StringComparison.OrdinalIgnoreCase));
+        }
+
+        filtered = (ModSort?.SelectedIndex ?? 0) switch
+        {
+            1 => filtered.OrderBy(mod => mod.FileName, StringComparer.OrdinalIgnoreCase),
+            2 => filtered.OrderByDescending(mod => mod.Enabled).ThenBy(mod => mod.DisplayName, StringComparer.OrdinalIgnoreCase),
+            _ => filtered.OrderBy(mod => mod.DisplayName, StringComparer.OrdinalIgnoreCase),
+        };
+
+        ModsList.ItemsSource = filtered.ToList();
     }
 
     private void ModCheck_Click(object sender, RoutedEventArgs e)
@@ -209,6 +357,8 @@ public partial class MainWindow : Window
         }
     }
 
+    // ---------- 启动 ----------
+
     private async void Launch_Click(object sender, RoutedEventArgs e)
     {
         if (AccountBox.SelectedItem is not Account account)
@@ -229,12 +379,27 @@ public partial class MainWindow : Window
         Progress.Maximum = 1;
         try
         {
+            string? gameDir = InstancesList.SelectedItem is Instance selected
+                ? InstanceStore.DirFor(_installRoot, selected.Name)
+                : null;
+
+            if (InstancesList.SelectedItem is Instance instance)
+            {
+                // 把当前选择写回实例，下次打开还记得
+                InstanceStore.AddOrUpdate(_installRoot, instance with
+                {
+                    VersionId = version.Id,
+                    Loader = FabricCheck.IsChecked == true ? "fabric" : null,
+                    AccountName = account.Name,
+                });
+            }
+
             var options = new LaunchOptions(
                 _installRoot,
                 version.Id,
                 FabricCheck.IsChecked == true ? "fabric" : null,
                 null,
-                null,
+                gameDir,
                 account);
 
             var progress = new Progress<LaunchProgress>(p =>
