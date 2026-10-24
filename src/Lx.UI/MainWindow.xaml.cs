@@ -678,6 +678,7 @@ public partial class MainWindow : Window
         {
             Arguments = arguments,
             UseShellExecute = false,
+            WorkingDirectory = result.GameDir,
         };
 
         Process? process = Process.Start(info);
