@@ -27,18 +27,16 @@ public static class DownloadManifest
                 continue;
             }
 
-            LibraryArtifact? artifact = library.Downloads?.Artifact;
-            if (artifact is null)
+            if (!LibraryResolver.TryGetArtifact(library, out LibraryArtifact artifact))
             {
                 continue;
             }
-
             string? path = artifact.Path;
             string? url = artifact.Url;
             string? sha1 = artifact.Sha1;
             if (path is null || url is null || sha1 is null)
             {
-                continue;
+                continue; // 没有 sha1 的库宁可跳过，也不下可疑文件
             }
 
             items.Add(new DownloadItem(url, "libraries/" + path, sha1, artifact.Size));
@@ -51,7 +49,8 @@ public static class DownloadManifest
             string? sha1 = client.Sha1;
             if (url is not null && sha1 is not null)
             {
-                items.Add(new DownloadItem(url, $"versions/{versionId}/{versionId}.jar", sha1, client.Size));
+                string clientVersionId = version.InheritsFrom ?? versionId;
+                items.Add(new DownloadItem(url, $"versions/{clientVersionId}/{clientVersionId}.jar", sha1, client.Size));
             }
         }
 

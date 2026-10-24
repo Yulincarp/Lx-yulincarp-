@@ -11,6 +11,7 @@ public class VersionJson
     public Arguments? Arguments { get; set; }
     public VersionDownloads? Downloads { get; set; }
     public AssetIndexInfo? AssetIndex { get; set; }
+    public string? InheritsFrom { get; set; }
 }
 
 public class JavaVersion
@@ -24,6 +25,11 @@ public class Library
     public string? Name { get; set; }
     public List<Rule>? Rules { get; set; }
     public LibraryDownloads? Downloads { get; set; }
+
+    // Fabric / Forge 这类库没有 downloads 对象，只有 maven 坐标。
+    public string? Url { get; set; }
+    public string? Sha1 { get; set; }
+    public long Size { get; set; }
 }
 
 public class LibraryDownloads

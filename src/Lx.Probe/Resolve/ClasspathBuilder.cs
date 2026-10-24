@@ -29,13 +29,12 @@ public static class ClasspathBuilder
                 continue;
             }
 
-            string? artifactPath = library.Downloads?.Artifact?.Path;
-            if (string.IsNullOrEmpty(artifactPath))
+            if (!LibraryResolver.TryGetArtifact(library, out LibraryArtifact artifact) || artifact.Path is null)
             {
-                continue; // 有些 library 只有 classifiers，没有 artifact
+                continue; // 没有可用 artifact（比如只有 classifiers）
             }
 
-            entries.Add(ToAbsolutePath(librariesDir, artifactPath));
+            entries.Add(ToAbsolutePath(librariesDir, artifact.Path));
         }
 
         entries.Add(Path.GetFullPath(clientJarPath));

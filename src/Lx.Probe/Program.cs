@@ -16,11 +16,26 @@ bool debug = false;
 bool relogin = false;
 bool listAccounts = false;
 string? accountArg = null;
+string? clientIdArg = null;
+string? loaderArg = null;
+string? loaderVersionArg = null;
 
 for (int i = 0; i < args.Length; i++)
 {
     string arg = args[i];
-    if (arg == "--accounts")
+    if (arg == "--loader" && i + 1 < args.Length)
+    {
+        loaderArg = args[++i];
+    }
+    else if (arg == "--loader-version" && i + 1 < args.Length)
+    {
+        loaderVersionArg = args[++i];
+    }
+    else if (arg == "--client-id" && i + 1 < args.Length)
+    {
+        clientIdArg = args[++i];
+    }
+    else if (arg == "--accounts")
     {
         listAccounts = true;
     }
@@ -115,6 +130,19 @@ catch (InvalidOperationException ex)
     return 1;
 }
 
+if (string.Equals(loaderArg, "fabric", StringComparison.OrdinalIgnoreCase))
+{
+    try
+    {
+        (versionId, versionJsonPath) = await FabricInstaller.InstallAsync(versionId, installRoot, loaderVersionArg);
+    }
+    catch (InvalidOperationException ex)
+    {
+        Console.WriteLine($"[错误] {ex.Message}");
+        return 1;
+    }
+}
+
 string authType = authArg ?? "offline";
 Account account;
 if (accountArg is not null)
@@ -174,6 +202,24 @@ switch (authType)
             return 1;
         }
         break;
+    case "microsoft":
+        if (clientIdArg is null)
+        {
+            Console.WriteLine("[错误] 正版登录需要 --client-id <Azure 应用的客户端 ID>");
+            return 1;
+        }
+
+        try
+        {
+            account = await MicrosoftAuth.LoginAsync(clientIdArg);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.WriteLine($"[错误] {ex.Message}");
+            return 1;
+        }
+
+        break;
     default:
         Console.WriteLine($"[错误] 暂不支持的登录方式：{authType}（offline / yggdrasil）");
         return 1;
@@ -218,7 +264,8 @@ Console.WriteLine();
 string gameRoot = Path.Combine(installRoot, "versions", versionId);
 string librariesDir = Path.Combine(installRoot, "libraries");
 string assetsDir = Path.Combine(installRoot, "assets");
-string clientJar = Path.Combine(installRoot, "versions", versionId, versionId + ".jar");
+string clientVersionId = v.InheritsFrom ?? versionId;
+string clientJar = Path.Combine(installRoot, "versions", clientVersionId, clientVersionId + ".jar");
 int failed = await Downloader.DownloadAllAsync(manifestItems, installRoot);
 Console.WriteLine($"下载结果：失败 {failed} 个");
 
