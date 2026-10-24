@@ -23,6 +23,16 @@ foreach (Library lib in (libraries ?? new List<Library>()).Take(3))
     Console.WriteLine($"  name = {lib.Name}");
 }
 
+// M2 Step 1：只算清单，不下载。
+List<DownloadItem> manifest = DownloadManifest.Build(v, v.Id ?? "1.20.4", features);
+double totalMb = manifest.Sum(i => i.Size) / 1024.0 / 1024.0;
+Console.WriteLine($"清单 = {manifest.Count} 个文件，合计 {totalMb:F1} MB");
+foreach (DownloadItem item in manifest.Take(3))
+{
+    Console.WriteLine($"  {item.RelativePath}");
+}
+Console.WriteLine();
+
 // Step 5：拼 classpath（只打印，不下载）。
 // 第 1 个参数 = 游戏安装根目录（libraries / assets / versions 在它下面），第 2 个 = 存档与 natives 所在的游戏目录。
 string installRoot = Path.GetFullPath(args.Length > 0 ? args[0] : "minecraft");
