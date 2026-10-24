@@ -45,3 +45,22 @@ foreach (string entry in classpath.Take(3))
 }
 
 Console.WriteLine($"classpath 全是绝对路径 = {classpath.All(Path.IsPathRooted)}，全是 .jar = {classpath.All(p => p.EndsWith(".jar", StringComparison.OrdinalIgnoreCase))}");
+
+// Step 6：1.20.4 的 natives 是独立的 ":natives-windows" 库，按架构挑出来后解压到 natives/。
+string nativesDir = Path.Combine(gameRoot, "natives");
+List<string> nativeJars = NativesExtractor.FindJars(
+    libraries ?? new List<Library>(),
+    new Dictionary<string, bool>(),
+    librariesDir);
+
+int missingJars = nativeJars.Count(jar => !File.Exists(jar));
+int nativeFiles = NativesExtractor.Extract(nativeJars, nativesDir);
+int nativeDlls = Directory.GetFiles(nativesDir, "*.dll", SearchOption.AllDirectories).Length;
+
+Console.WriteLine($"natives jars = {nativeJars.Count}（{NativesExtractor.ArchSuffix}），缺少 {missingJars} 个");
+Console.WriteLine($"natives dir = {nativesDir}");
+Console.WriteLine($"natives files = {nativeFiles}，dll = {nativeDlls}");
+foreach (string dll in Directory.GetFiles(nativesDir, "*.dll", SearchOption.TopDirectoryOnly).OrderBy(n => n).Take(5))
+{
+    Console.WriteLine($"  {Path.GetFileName(dll)}");
+}

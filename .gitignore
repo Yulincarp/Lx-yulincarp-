@@ -482,3 +482,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# 下载的游戏文件（libraries / natives / versions），不入库
+minecraft/
