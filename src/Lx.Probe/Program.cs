@@ -40,14 +40,14 @@ string gameRoot = Path.GetFullPath(args.Length > 1 ? args[1] : "minecraft");
 string librariesDir = Path.Combine(installRoot, "libraries");
 string assetsDir = Path.Combine(installRoot, "assets");
 string clientJar = Path.Combine(installRoot, "versions", "1.20.4", "1.20.4.jar");
-int failed = Downloader.DownloadAll(manifest, installRoot);
+int failed = await Downloader.DownloadAllAsync(manifest, installRoot);
 Console.WriteLine($"下载结果：失败 {failed} 个");
 
 // M2 Step 4：下载 assets（index 已经在上面下过，这里解析后再下 3811 个对象）。
 string indexFile = Path.Combine(assetsDir, "indexes", (v.Assets ?? "12") + ".json");
 List<DownloadItem> assets = DownloadManifest.BuildAssets(indexFile);
 Console.WriteLine($"assets 清单 = {assets.Count} 个文件");
-int failedAssets = Downloader.DownloadAll(assets, installRoot);
+int failedAssets = await Downloader.DownloadAllAsync(assets, installRoot);
 Console.WriteLine($"assets 下载失败 {failedAssets} 个");
 
 List<string> classpath = ClasspathBuilder.Build(

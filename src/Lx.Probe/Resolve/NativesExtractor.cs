@@ -80,8 +80,15 @@ public static class NativesExtractor
                 }
 
                 Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-                entry.ExtractToFile(destination, overwrite: true);
-                written++;
+                try
+                {
+                    entry.ExtractToFile(destination, overwrite: true);
+                    written++;
+                }
+                catch (IOException)
+                {
+                    // 游戏正在运行时会锁住 dll：说明它已经解压过了，跳过即可。
+                }
             }
         }
 
