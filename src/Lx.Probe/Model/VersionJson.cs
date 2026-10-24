@@ -1,4 +1,4 @@
-﻿namespace Lx.Probe.Model;
+namespace Lx.Probe.Model;
 
 // 对应 Mojang version.json 的顶层字段（M1 只需要这几个）。
 public class VersionJson
@@ -10,6 +10,7 @@ public class VersionJson
     public List<Library>? Libraries { get; set; }
     public Arguments? Arguments { get; set; }
     public VersionDownloads? Downloads { get; set; }
+    public AssetIndexInfo? AssetIndex { get; set; }
 }
 
 public class JavaVersion
@@ -41,4 +42,11 @@ public class LibraryArtifact
 public class VersionDownloads
 {
     public LibraryArtifact? Client { get; set; }
+}
+public class AssetIndexInfo
+{
+    public string? Id { get; set; }
+    public string? Sha1 { get; set; }
+    public long Size { get; set; }
+    public string? Url { get; set; }
 }

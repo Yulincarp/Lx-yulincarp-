@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Lx.Probe.Model;
 
 namespace Lx.Probe.Resolve;
@@ -52,6 +53,43 @@ public static class DownloadManifest
             {
                 items.Add(new DownloadItem(url, $"versions/{versionId}/{versionId}.jar", sha1, client.Size));
             }
+        }
+
+        AssetIndexInfo? assetIndex = version.AssetIndex;
+        if (assetIndex?.Url is not null && assetIndex.Sha1 is not null && assetIndex.Id is not null)
+        {
+            items.Add(new DownloadItem(assetIndex.Url, $"assets/indexes/{assetIndex.Id}.json", assetIndex.Sha1, assetIndex.Size));
+        }
+
+        return items;
+    }
+
+    // 解析 assets/indexes/<id>.json，把 3811 个对象变成下载条目。
+    public static List<DownloadItem> BuildAssets(string indexPath)
+    {
+        string json = File.ReadAllText(indexPath);
+        AssetIndexFile? index = JsonSerializer.Deserialize<AssetIndexFile>(
+            json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        if (index?.Objects is null)
+        {
+            return new List<DownloadItem>();
+        }
+
+        var items = new List<DownloadItem>(index.Objects.Count);
+        foreach (KeyValuePair<string, AssetObject> pair in index.Objects)
+        {
+            string? hash = pair.Value.Hash;
+            if (hash is null || hash.Length < 2)
+            {
+                continue;
+            }
+
+            string prefix = hash[..2];
+            items.Add(new DownloadItem(
+                $"https://resources.download.minecraft.net/{prefix}/{hash}",
+                $"assets/objects/{prefix}/{hash}",
+                hash,
+                pair.Value.Size));
         }
 
         return items;
