@@ -89,6 +89,89 @@ public static class CurseForgeClient
         }
     }
 
+    // 按 slug 找项目，再按游戏版本 + 加载器找最新文件（modLoaderType：1 Forge / 4 Fabric / 6 NeoForge）。
+    public static async Task<CurseForgeFile?> FindModFileAsync(
+        string slug,
+        string gameVersion,
+        int modLoaderType,
+        string apiKey,
+        Action<string> log)
+    {
+        using var search = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"{Base}/mods/search?gameId=432&slug={Uri.EscapeDataString(slug)}&pageSize=1");
+        search.Headers.Add("x-api-key", apiKey);
+        search.Headers.Add("Accept", "application/json");
+
+        using HttpResponseMessage searchResponse = await Http.SendAsync(search).ConfigureAwait(false);
+        await EnsureOkAsync(searchResponse, "搜索项目").ConfigureAwait(false);
+
+        JsonNode? searchRoot = JsonNode.Parse(await searchResponse.Content.ReadAsStringAsync().ConfigureAwait(false));
+        long? modId = (searchRoot?["data"] as JsonArray)?.FirstOrDefault()?["id"]?.GetValue<long>();
+        if (modId is null)
+        {
+            log($"CurseForge 上找不到项目 {slug}");
+            return null;
+        }
+
+        using var filesRequest = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"{Base}/mods/{modId}/files?gameVersion={Uri.EscapeDataString(gameVersion)}&modLoaderType={modLoaderType}&pageSize=50");
+        filesRequest.Headers.Add("x-api-key", apiKey);
+        filesRequest.Headers.Add("Accept", "application/json");
+
+        using HttpResponseMessage filesResponse = await Http.SendAsync(filesRequest).ConfigureAwait(false);
+        await EnsureOkAsync(filesResponse, "查询文件").ConfigureAwait(false);
+
+        JsonNode? filesRoot = JsonNode.Parse(await filesResponse.Content.ReadAsStringAsync().ConfigureAwait(false));
+        JsonArray? files = filesRoot?["data"] as JsonArray;
+        if (files is null || files.Count == 0)
+        {
+            return null;
+        }
+
+        JsonNode? newest = files
+            .Where(node => node?["downloadUrl"] is not null)
+            .OrderByDescending(node => node?["fileDate"]?.GetValue<string>() ?? string.Empty, StringComparer.Ordinal)
+            .FirstOrDefault();
+
+        if (newest is null)
+        {
+            return null;
+        }
+
+        string? sha1 = null;
+        foreach (JsonNode? hash in newest["hashes"] as JsonArray ?? new JsonArray())
+        {
+            if (hash?["algo"]?.GetValue<int>() == 1)
+            {
+                sha1 = hash["value"]?.GetValue<string>();
+                break;
+            }
+        }
+
+        return new CurseForgeFile(
+            newest["id"]?.GetValue<long>() ?? 0,
+            newest["fileName"]?.GetValue<string>() ?? $"{slug}.jar",
+            newest["downloadUrl"]?.GetValue<string>(),
+            sha1,
+            newest["fileLength"]?.GetValue<long>() ?? 0);
+    }
+
+    private static async Task EnsureOkAsync(HttpResponseMessage response, string what)
+    {
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            throw new InvalidOperationException("CurseForge 拒绝了这个 API key（401/403），检查 key 是否有效");
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            throw new InvalidOperationException($"CurseForge {what}失败（{(int)response.StatusCode}）：{body}");
+        }
+    }
+
     // 批量查文件信息（接口一次最多 100 个）。
     public static async Task<Dictionary<long, CurseForgeFile>> GetFilesAsync(
         IReadOnlyCollection<long> fileIds,

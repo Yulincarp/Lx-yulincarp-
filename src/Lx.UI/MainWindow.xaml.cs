@@ -293,7 +293,8 @@ public partial class MainWindow : Window
                 _installRoot,
                 version,
                 CurrentGameDir(),
-                message => Dispatcher.Invoke(() => Log(message)));
+                message => Dispatcher.Invoke(() => Log(message)),
+                CurseForgeClient.ResolveKey(_installRoot));
 
             RefreshMods();
         }

@@ -1,11 +1,12 @@
 using Lx.Probe.Instances;
+using Lx.Probe.Modpacks;
 using Lx.Probe.Mods;
 using Lx.Probe.Resolve;
 
 namespace Lx.Probe.Loaders;
 
 // OptiFine 在 Fabric 上的标准做法：Fabric + OptiFabric 模组 + 用户手动放的 OptiFine jar。
-// 这里负责把 OptiFabric 从 Modrinth 装进 mods，并检查 OptiFine jar 在不在。
+// OptiFabric 只发布在 CurseForge，这里用 API key 搜索并装进 mods，再检查 OptiFine jar 在不在。
 public static class OptiFineHelper
 {
     private const string OptiFabricSlug = "optifabric";
@@ -14,14 +15,22 @@ public static class OptiFineHelper
         string installRoot,
         string gameVersion,
         string instanceDir,
-        Action<string> log)
+        Action<string> log,
+        string? apiKey = null)
     {
-        var file = await ModrinthClient.GetLatestFileAsync(OptiFabricSlug, gameVersion, "fabric").ConfigureAwait(false);
-        if (file is null)
+        string? key = CurseForgeClient.ResolveKey(installRoot, apiKey);
+        if (key is null)
         {
-            log("OptiFabric 没有发布在 Modrinth 上（同名项目是整合包，不是模组）。");
-            log("推荐做法：用 OptiFine 官方安装器装一次，它会生成 versions/<id>/ 版本目录；");
-            log("本启动器的版本下拉框会自动列出它，选它启动即可（兼容 inheritsFrom 合并）。");
+            log("OptiFabric 只发布在 CurseForge，自动下载需要 API key。");
+            log("用 --cf-key <key>（或写进 minecraft\\curseforge-key.txt）后重试；");
+            log("或者用 OptiFine 官方安装器装一次，本启动器会把它列进版本列表直接启动。");
+            return;
+        }
+
+        var file = await CurseForgeClient.FindModFileAsync("optifabric", gameVersion, 4, key, log).ConfigureAwait(false);
+        if (file?.DownloadUrl is null)
+        {
+            log($"CurseForge 上没有支持 {gameVersion} 的 OptiFabric（可能只支持更早的版本）");
             return;
         }
 
@@ -29,10 +38,10 @@ public static class OptiFineHelper
         Directory.CreateDirectory(modsDir);
 
         var item = new DownloadItem(
-            file.Value.Url,
-            "mods/" + file.Value.FileName,
-            file.Value.Sha1 ?? string.Empty,
-            file.Value.Size);
+            file.DownloadUrl,
+            "mods/" + file.FileName,
+            file.Sha1 ?? string.Empty,
+            file.Size);
 
         int failed = await Downloader.DownloadAllAsync(new[] { item }, instanceDir).ConfigureAwait(false);
         if (failed > 0)
@@ -40,7 +49,7 @@ public static class OptiFineHelper
             throw new InvalidOperationException("OptiFabric 下载失败");
         }
 
-        log($"已安装 OptiFabric：{file.Value.FileName}");
+        log($"已安装 OptiFabric：{file.FileName}");
 
         bool hasOptiFine = Directory.EnumerateFiles(modsDir, "*.jar")
             .Any(jar => Path.GetFileName(jar).Contains("OptiFine", StringComparison.OrdinalIgnoreCase));

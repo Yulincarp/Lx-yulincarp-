@@ -185,7 +185,18 @@ if (installOptiFabricFlag)
 
     try
     {
-        await OptiFineHelper.InstallOptiFabricAsync(installRoot, versionId, targetDir, Console.WriteLine);
+        if (cfKeyArg is not null)
+        {
+            CurseForgeClient.SaveKey(installRoot, cfKeyArg);
+        }
+
+        await OptiFineHelper.InstallOptiFabricAsync(
+            installRoot,
+            versionId,
+            targetDir,
+            Console.WriteLine,
+            CurseForgeClient.ResolveKey(installRoot, cfKeyArg));
+
         return 0;
     }
     catch (Exception ex) when (ex is InvalidOperationException or IOException)
