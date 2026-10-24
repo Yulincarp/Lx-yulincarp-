@@ -1,10 +1,13 @@
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 using Lx.Probe.Auth;
 using Lx.Probe.Launch;
 using Lx.Probe.Model;
+using Lx.Probe.Mods;
 using Lx.Probe.Resolve;
+using Microsoft.Win32;
 
 namespace Lx.UI;
 
@@ -12,6 +15,12 @@ public partial class MainWindow : Window
 {
     // 从 bin 目录往上找 Lx.sln，把 minecraft 定位到仓库根，避免"从哪个目录启动"影响结果。
     private readonly string _installRoot = ResolveInstallRoot();
+
+    public MainWindow()
+    {
+        InitializeComponent();
+        Loaded += async (_, _) => await InitializeAsync();
+    }
 
     private static string ResolveInstallRoot()
     {
@@ -29,12 +38,6 @@ public partial class MainWindow : Window
         return Path.GetFullPath("minecraft");
     }
 
-    public MainWindow()
-    {
-        InitializeComponent();
-        Loaded += async (_, _) => await InitializeAsync();
-    }
-
     private async Task InitializeAsync()
     {
         try
@@ -46,6 +49,7 @@ public partial class MainWindow : Window
             VersionBox.SelectedItem = versions.FirstOrDefault(v => v.Id == "1.20.4") ?? versions.FirstOrDefault();
 
             RefreshAccounts();
+            RefreshMods();
 
             Log($"安装目录：{_installRoot}");
             Log($"版本清单：{versions.Count} 个");
@@ -81,6 +85,108 @@ public partial class MainWindow : Window
         Log($"已添加离线账号：{name}（{account.Uuid}）");
     }
 
+    private void Version_Changed(object sender, RoutedEventArgs e) => RefreshMods();
+
+    private void RefreshMods_Click(object sender, RoutedEventArgs e) => RefreshMods();
+
+    private void RefreshMods()
+    {
+        if (ModsList is null)
+        {
+            return;
+        }
+
+        try
+        {
+            string gameDir = CurrentGameDir();
+            ModsPathText.Text = ModManager.ModsDir(gameDir);
+            ModsList.ItemsSource = ModManager.List(gameDir);
+        }
+        catch (Exception ex)
+        {
+            Log($"[错误] {ex.Message}");
+        }
+    }
+
+    // 当前版本的游戏目录：Fabric 勾上时优先找已装好的 fabric-loader-*-<版本>。
+    private string CurrentGameDir()
+    {
+        string version = (VersionBox.SelectedItem as ManifestVersion)?.Id ?? "1.20.4";
+        string versionsDir = Path.Combine(_installRoot, "versions");
+
+        if (FabricCheck.IsChecked == true && Directory.Exists(versionsDir))
+        {
+            string? fabric = Directory
+                .EnumerateDirectories(versionsDir, $"fabric-loader-*-{version}")
+                .FirstOrDefault();
+            if (fabric is not null)
+            {
+                return fabric;
+            }
+        }
+
+        return Path.Combine(versionsDir, version);
+    }
+
+    private void ModCheck_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not CheckBox box || box.DataContext is not ModFile mod)
+        {
+            return;
+        }
+
+        ModManager.SetEnabled(CurrentGameDir(), mod.FileName, box.IsChecked == true);
+        RefreshMods();
+    }
+
+    private void AddMod_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "Fabric mod (*.jar)|*.jar",
+            Multiselect = true,
+            Title = "选择 mod jar",
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        string gameDir = CurrentGameDir();
+        Directory.CreateDirectory(ModManager.ModsDir(gameDir));
+
+        foreach (string file in dialog.FileNames)
+        {
+            try
+            {
+                ModManager.Add(gameDir, file);
+                Log($"已添加 mod：{Path.GetFileName(file)}");
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or IOException)
+            {
+                Log($"[错误] {ex.Message}");
+            }
+        }
+
+        RefreshMods();
+    }
+
+    private void RemoveMod_Click(object sender, RoutedEventArgs e)
+    {
+        if (ModsList.SelectedItem is not ModFile mod)
+        {
+            Log("先在列表里选中一个 mod");
+            return;
+        }
+
+        if (ModManager.Remove(CurrentGameDir(), mod.FileName))
+        {
+            Log($"已删除 mod：{mod.FileName}");
+            RefreshMods();
+        }
+    }
+
     private async void Launch_Click(object sender, RoutedEventArgs e)
     {
         if (AccountBox.SelectedItem is not Account account)
@@ -114,6 +220,7 @@ public partial class MainWindow : Window
             Log($"命令行：{result.CommandLine.Length} 字符");
             StartGame(result.CommandLine);
             StatusText.Text = "已启动";
+            RefreshMods();
         }
         catch (Exception ex)
         {

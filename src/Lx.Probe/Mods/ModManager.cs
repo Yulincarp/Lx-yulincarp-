@@ -5,7 +5,10 @@ using System.Text.Json.Nodes;
 namespace Lx.Probe.Mods;
 
 // 一个 mod 文件（.jar 或 .jar.disabled）。
-public sealed record ModFile(string FileName, string? Id, string? Name, string? Version, bool Enabled, long Size);
+public sealed record ModFile(string FileName, string? Id, string? Name, string? Version, bool Enabled, long Size)
+{
+    public string DisplayName => string.IsNullOrEmpty(Name) ? FileName : Name!;
+}
 
 // mods 目录的增删改查。启用/禁用靠改后缀：xxx.jar ↔ xxx.jar.disabled。
 public static class ModManager
