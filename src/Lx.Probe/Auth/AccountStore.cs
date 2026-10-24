@@ -33,6 +33,10 @@ public static class AccountStore
         }
     }
 
+    public static Account? FindByName(string installRoot, string name) =>
+        Load(installRoot).FirstOrDefault(account =>
+            string.Equals(account.Name, name, StringComparison.OrdinalIgnoreCase));
+
     // 同一个 type + name 覆盖，其他账号保留。
     public static void Save(string installRoot, Account account)
     {

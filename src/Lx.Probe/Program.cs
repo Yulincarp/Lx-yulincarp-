@@ -14,11 +14,21 @@ string? emailArg = null;
 bool listOnly = false;
 bool debug = false;
 bool relogin = false;
+bool listAccounts = false;
+string? accountArg = null;
 
 for (int i = 0; i < args.Length; i++)
 {
     string arg = args[i];
-    if (arg == "--relogin")
+    if (arg == "--accounts")
+    {
+        listAccounts = true;
+    }
+    else if (arg == "--account" && i + 1 < args.Length)
+    {
+        accountArg = args[++i];
+    }
+    else if (arg == "--relogin")
     {
         relogin = true;
     }
@@ -61,6 +71,24 @@ for (int i = 0; i < args.Length; i++)
 }
 
 string installRoot = Path.GetFullPath(rootArg ?? "minecraft");
+
+if (listAccounts)
+{
+    List<Account> stored = AccountStore.Load(installRoot);
+    if (stored.Count == 0)
+    {
+        Console.WriteLine("还没有保存的账号，先登录一次。");
+        return 0;
+    }
+
+    Console.WriteLine($"已保存 {stored.Count} 个账号（{AccountStore.PathFor(installRoot)}）：");
+    foreach (Account saved in stored)
+    {
+        Console.WriteLine($"  {saved.Type,-9} {saved.Name,-16} {saved.Uuid} {(saved.ApiRoot ?? string.Empty)}");
+    }
+
+    return 0;
+}
 VersionManifest manifest = await ManifestService.EnsureManifestAsync(installRoot);
 
 if (listOnly)
@@ -89,6 +117,19 @@ catch (InvalidOperationException ex)
 
 string authType = authArg ?? "offline";
 Account account;
+if (accountArg is not null)
+{
+    Account? selected = AccountStore.FindByName(installRoot, accountArg);
+    if (selected is null)
+    {
+        Console.WriteLine($"[错误] 没有叫 {accountArg} 的账号，用 --accounts 查看已保存的账号");
+        return 1;
+    }
+
+    account = selected;
+}
+else
+{
 switch (authType)
 {
     case "offline":
@@ -137,6 +178,8 @@ switch (authType)
         Console.WriteLine($"[错误] 暂不支持的登录方式：{authType}（offline / yggdrasil）");
         return 1;
 }
+}
+
 AccountStore.Save(installRoot, account);
 Console.WriteLine($"账号：{account.Type} {account.Name} {account.Uuid}");
 
