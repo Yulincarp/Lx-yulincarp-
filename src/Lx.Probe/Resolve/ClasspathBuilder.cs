@@ -12,6 +12,8 @@ public static class ClasspathBuilder
         Dictionary<string, bool> features)
     {
         var entries = new List<string>();
+        // NeoForge/Forge 的版本 JSON 里可能重复声明和原版相同的库，按绝对路径去重。
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (Library library in libraries)
         {
@@ -34,10 +36,18 @@ public static class ClasspathBuilder
                 continue; // 没有可用 artifact（比如只有 classifiers）
             }
 
-            entries.Add(ToAbsolutePath(librariesDir, artifact.Path));
+            string absolute = ToAbsolutePath(librariesDir, artifact.Path);
+            if (seen.Add(absolute))
+            {
+                entries.Add(absolute);
+            }
         }
 
-        entries.Add(Path.GetFullPath(clientJarPath));
+        string client = Path.GetFullPath(clientJarPath);
+        if (seen.Add(client))
+        {
+            entries.Add(client);
+        }
         return entries;
     }
 

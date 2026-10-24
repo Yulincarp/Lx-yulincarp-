@@ -26,6 +26,7 @@ string? modsTarget = null;
 string? importArg = null;
 string? cfKeyArg = null;
 string? installLoaderArg = null;
+string? artifactSourceArg = null;
 bool updatePackFlag = false;
 bool installOptiFabricFlag = false;
 string? accountArg = null;
@@ -89,6 +90,10 @@ for (int i = 0; i < args.Length; i++)
     {
         installLoaderArg = args[++i];
     }
+    else if (arg == "--artifact-source" && i + 1 < args.Length)
+    {
+        artifactSourceArg = args[++i];
+    }
     else if (arg == "--update-pack")
     {
         updatePackFlag = true;
@@ -143,7 +148,8 @@ if (installLoaderArg is not null)
             installRoot,
             installLoaderArg,
             loaderVersionArg,
-            Console.WriteLine);
+            Console.WriteLine,
+            artifactSourceArg);
 
         Console.WriteLine($"安装完成：{installedId}");
         Console.WriteLine($"启动：dotnet run --project src/Lx.Probe -- --version {installedId}");

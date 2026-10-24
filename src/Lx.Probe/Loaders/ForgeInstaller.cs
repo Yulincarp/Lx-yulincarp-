@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using Lx.Probe.Resolve;
 
 namespace Lx.Probe.Loaders;
 
@@ -33,12 +34,13 @@ public static class ForgeInstaller
         string installRoot,
         string loader,
         string? loaderVersion,
-        Action<string> log)
+        Action<string> log,
+        string? artifactSource = null)
     {
         string installerPath = loader.ToLowerInvariant() switch
         {
             "forge" => await DownloadForgeAsync(minecraftVersion, loaderVersion, installRoot, log).ConfigureAwait(false),
-            "neoforge" => await DownloadNeoForgeAsync(minecraftVersion, loaderVersion, installRoot, log).ConfigureAwait(false),
+            "neoforge" => await DownloadNeoForgeAsync(minecraftVersion, loaderVersion, installRoot, artifactSource, log).ConfigureAwait(false),
             _ => throw new InvalidOperationException($"不认识的加载器：{loader}（只支持 forge / neoforge）"),
         };
 
@@ -72,7 +74,7 @@ public static class ForgeInstaller
         return await DownloadInstallerAsync(url, installRoot, $"forge-{picked}-installer.jar", log).ConfigureAwait(false);
     }
 
-    private static async Task<string> DownloadNeoForgeAsync(string minecraftVersion, string? loaderVersion, string installRoot, Action<string> log)
+    private static async Task<string> DownloadNeoForgeAsync(string minecraftVersion, string? loaderVersion, string installRoot, string? artifactSource, Action<string> log)
     {
         log("查询 NeoForge 版本列表…");
         string xml = await GetTextWithFallbackAsync(NeoForgeMetadata, NeoForgeMirrorMetadata, log).ConfigureAwait(false);
@@ -99,7 +101,7 @@ public static class ForgeInstaller
         string directUrl = $"https://maven.neoforged.net/releases/net/neoforged/neoforge/{picked}/{fileName}";
         string mirrorUrl = $"{NeoForgeMirrorBase}net/neoforged/neoforge/{picked}/{fileName}";
         string installer = await DownloadInstallerWithFallbackAsync(directUrl, mirrorUrl, installRoot, fileName, log).ConfigureAwait(false);
-        return PatchNeoForgeInstaller(installer, log);
+        return PatchNeoForgeInstaller(installer, installRoot, artifactSource, log);
     }
 
     // 1.20.253 和 1.20.99 这种，必须按数字比，不能按字符串。
@@ -222,7 +224,7 @@ public static class ForgeInstaller
     }
 
     // 安装器里的库地址写死成 maven.neoforged.net，这里整包改写成 BMCLAPI 镜像。
-    private static string PatchNeoForgeInstaller(string installerPath, Action<string> log)
+    private static string PatchNeoForgeInstaller(string installerPath, string installRoot, string? artifactSource, Action<string> log)
     {
         string patched = Path.Combine(
             Path.GetDirectoryName(installerPath)!,
@@ -231,6 +233,14 @@ public static class ForgeInstaller
         if (File.Exists(patched))
         {
             File.Delete(patched);
+        }
+
+        // BMCLAPI 没有 JarJarFileSystems；如果本地（--artifact-source 或 installRoot/libraries）
+        // 有别的版本（比如 0.4.1），就用它顶替并把校验值改成对应文件的值。
+        string? jarJar = FindArtifact(installRoot, artifactSource, "net/neoforged/JarJarFileSystems");
+        if (jarJar is not null)
+        {
+            log($"JarJarFileSystems 用本地文件顶替：{jarJar}");
         }
 
         using (ZipArchive source = ZipFile.OpenRead(installerPath))
@@ -249,6 +259,12 @@ public static class ForgeInstaller
                     string text = reader.ReadToEnd()
                         .Replace("https://maven.neoforged.net/releases/", NeoForgeMirrorBase)
                         .Replace("https://maven.neoforged.net/", NeoForgeMirrorBase);
+
+                    if (jarJar is not null && text.Contains("JarJarFileSystems/0.4.0", StringComparison.Ordinal))
+                    {
+                        text = ReplaceJarJarVersion(text, jarJar);
+                    }
+
                     using var writer = new StreamWriter(output);
                     writer.Write(text);
                 }
@@ -259,9 +275,104 @@ public static class ForgeInstaller
             }
         }
 
+        if (jarJar is not null)
+        {
+            CopyJarJarInto(installRoot, jarJar, log);
+        }
+
         log("已把安装器里的 maven 地址改写为 BMCLAPI 镜像");
         return patched;
     }
+
+    // 在给定目录里找某个 group/artifact 的任意版本 jar（取路径排序最靠后的，通常是最高版本）。
+    private static string? FindArtifact(string installRoot, string? artifactSource, string relativeGroupDir)
+    {
+        var roots = new List<string>();
+        if (artifactSource is not null)
+        {
+            roots.Add(artifactSource);
+        }
+
+        roots.Add(Path.Combine(installRoot, "libraries"));
+
+        foreach (string root in roots)
+        {
+            string dir = Path.Combine(root, relativeGroupDir.Replace('/', Path.DirectorySeparatorChar));
+            if (!Directory.Exists(dir))
+            {
+                continue;
+            }
+
+            string? found = Directory
+                .EnumerateFiles(dir, "*.jar", SearchOption.AllDirectories)
+                .OrderByDescending(path => path, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
+
+            if (found is not null)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    // 把 JSON 里 JarJar 的 0.4.0 全部换成实际文件版本，并把 artifact 的 sha1/size/url 改成真实值。
+    private static string ReplaceJarJarVersion(string json, string jarPath)
+    {
+        string version = new DirectoryInfo(Path.GetDirectoryName(jarPath)!).Name;
+        string fileName = Path.GetFileName(jarPath);
+
+        string text = json
+            .Replace("JarJarFileSystems/0.4.0/", $"JarJarFileSystems/{version}/")
+            .Replace("JarJarFileSystems-0.4.0.jar", fileName);
+
+        System.Text.Json.Nodes.JsonNode? root = System.Text.Json.Nodes.JsonNode.Parse(text);
+        if (root?["libraries"] is System.Text.Json.Nodes.JsonArray libraries)
+        {
+            string sha1 = Hasher.Sha1Of(jarPath);
+            long size = new FileInfo(jarPath).Length;
+
+            foreach (System.Text.Json.Nodes.JsonNode? library in libraries)
+            {
+                System.Text.Json.Nodes.JsonNode? artifact = library?["downloads"]?["artifact"];
+                string? path = artifact?["path"]?.GetValue<string>();
+                if (artifact is not null && path is not null &&
+                    path.Contains("JarJarFileSystems", StringComparison.OrdinalIgnoreCase))
+                {
+                    artifact["sha1"] = sha1;
+                    artifact["size"] = size;
+                    artifact["url"] = NeoForgeMirrorBase + path;
+                }
+            }
+
+            text = root.ToJsonString();
+        }
+
+        return text;
+    }
+
+    private static void CopyJarJarInto(string installRoot, string jarPath, Action<string> log)
+    {
+        string version = new DirectoryInfo(Path.GetDirectoryName(jarPath)!).Name;
+        string fileName = Path.GetFileName(jarPath);
+        string targetDir = Path.Combine(
+            installRoot,
+            "libraries",
+            "net",
+            "neoforged",
+            "JarJarFileSystems",
+            version);
+
+        Directory.CreateDirectory(targetDir);
+        string target = Path.Combine(targetDir, fileName);
+        if (!File.Exists(target) || new FileInfo(target).Length != new FileInfo(jarPath).Length)
+        {
+            File.Copy(jarPath, target, overwrite: true);
+            log($"已复制 {fileName} 到 libraries");
+        }
+    }
+
     private static async Task<string> DownloadInstallerAsync(string url, string installRoot, string fileName, Action<string> log)
     {
         string dir = Path.Combine(installRoot, "installers");

@@ -143,6 +143,20 @@ public static class LaunchPipeline
         };
 
         List<string> jvmArgs = ArgumentExpander.Expand(version.Arguments?.Jvm, values, features);
+
+        // Forge/NeoForge 用 -DignoreList 决定哪些 classpath jar 不参与模块化。
+        // 官方启动器靠 ${version_name}.jar 忽略原版客户端 jar；我们 --version 用的是 loader 的 id，
+        // 所以把它显式追加进去，避免和补丁版 client 的模块冲突。
+        string clientFileName = Path.GetFileName(clientJar);
+        for (int i = 0; i < jvmArgs.Count; i++)
+        {
+            if (jvmArgs[i].StartsWith("-DignoreList=", StringComparison.Ordinal) &&
+                !jvmArgs[i].Contains(clientFileName, StringComparison.OrdinalIgnoreCase))
+            {
+                jvmArgs[i] += "," + clientFileName;
+                log($"ignoreList 追加 {clientFileName}");
+            }
+        }
         if (options.Account.Type == "yggdrasil")
         {
             string injector = Path.Combine(installRoot, "authlib-injector.jar");
