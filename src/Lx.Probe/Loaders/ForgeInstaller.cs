@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Compression;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
@@ -10,6 +11,9 @@ public static class ForgeInstaller
 {
     private const string ForgeMetadata = "https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml";
     private const string NeoForgeMetadata = "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml";
+    // 国内直连 maven.neoforged.net 基本不通，BMCLAPI 镜像了同一个 maven 目录。
+    private const string NeoForgeMirrorBase = "https://bmclapi2.bangbang93.com/maven/";
+    private const string NeoForgeMirrorMetadata = NeoForgeMirrorBase + "net/neoforged/neoforge/maven-metadata.xml";
 
     // 有些 maven（Cloudflare 后面）对 HTTP/2 支持不好，会一直挂着，强制 HTTP/1.1。
     private static readonly HttpClient Http = new(new HttpClientHandler())
@@ -18,6 +22,11 @@ public static class ForgeInstaller
         DefaultRequestVersion = System.Net.HttpVersion.Version11,
         DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
     };
+
+    static ForgeInstaller()
+    {
+        Http.DefaultRequestHeaders.UserAgent.ParseAdd("Lx-Launcher/0.1");
+    }
 
     public static async Task<string> InstallAsync(
         string minecraftVersion,
@@ -49,7 +58,7 @@ public static class ForgeInstaller
         {
             picked = versions
                 .Where(version => version.StartsWith(minecraftVersion + "-", StringComparison.OrdinalIgnoreCase))
-                .OrderBy(version => version, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(version => version, Comparer<string>.Create(CompareVersions))
                 .LastOrDefault();
         }
 
@@ -66,7 +75,7 @@ public static class ForgeInstaller
     private static async Task<string> DownloadNeoForgeAsync(string minecraftVersion, string? loaderVersion, string installRoot, Action<string> log)
     {
         log("查询 NeoForge 版本列表…");
-        string xml = await Http.GetStringAsync(NeoForgeMetadata).ConfigureAwait(false);
+        string xml = await GetTextWithFallbackAsync(NeoForgeMetadata, NeoForgeMirrorMetadata, log).ConfigureAwait(false);
         List<string> versions = ReadVersions(xml);
 
         string prefix = NeoForgePrefix(minecraftVersion);
@@ -75,7 +84,8 @@ public static class ForgeInstaller
         {
             picked = versions
                 .Where(version => version.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(version => version, StringComparer.OrdinalIgnoreCase)
+                .Where(version => !version.Contains('-', StringComparison.Ordinal))
+                .OrderBy(version => version, Comparer<string>.Create(CompareVersions))
                 .LastOrDefault();
         }
 
@@ -85,8 +95,43 @@ public static class ForgeInstaller
         }
 
         log($"选择 NeoForge {picked}");
-        string url = $"https://maven.neoforged.net/releases/net/neoforged/neoforge/{picked}/neoforge-{picked}-installer.jar";
-        return await DownloadInstallerAsync(url, installRoot, $"neoforge-{picked}-installer.jar", log).ConfigureAwait(false);
+        string fileName = $"neoforge-{picked}-installer.jar";
+        string directUrl = $"https://maven.neoforged.net/releases/net/neoforged/neoforge/{picked}/{fileName}";
+        string mirrorUrl = $"{NeoForgeMirrorBase}net/neoforged/neoforge/{picked}/{fileName}";
+        string installer = await DownloadInstallerWithFallbackAsync(directUrl, mirrorUrl, installRoot, fileName, log).ConfigureAwait(false);
+        return PatchNeoForgeInstaller(installer, log);
+    }
+
+    // 1.20.253 和 1.20.99 这种，必须按数字比，不能按字符串。
+    private static int CompareVersions(string left, string right)
+    {
+        string[] leftParts = left.Split('.', '-');
+        string[] rightParts = right.Split('.', '-');
+        int length = Math.Max(leftParts.Length, rightParts.Length);
+
+        for (int i = 0; i < length; i++)
+        {
+            string leftPart = i < leftParts.Length ? leftParts[i] : "0";
+            string rightPart = i < rightParts.Length ? rightParts[i] : "0";
+
+            if (int.TryParse(leftPart, out int leftNumber) && int.TryParse(rightPart, out int rightNumber))
+            {
+                if (leftNumber != rightNumber)
+                {
+                    return leftNumber.CompareTo(rightNumber);
+                }
+
+                continue;
+            }
+
+            int text = string.Compare(leftPart, rightPart, StringComparison.OrdinalIgnoreCase);
+            if (text != 0)
+            {
+                return text;
+            }
+        }
+
+        return 0;
     }
 
     // 1.20.4 → 20.4.    1.21.1 → 21.1.    1.21 → 21.0.
@@ -112,6 +157,111 @@ public static class ForgeInstaller
             .ToList();
     }
 
+    private static async Task<string> GetTextWithFallbackAsync(string direct, string mirror, Action<string> log)
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            return await Http.GetStringAsync(direct, cts.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException)
+        {
+            log($"直连失败（{ex.GetType().Name}），改用镜像");
+            return await Http.GetStringAsync(mirror).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task<string> DownloadInstallerWithFallbackAsync(
+        string directUrl,
+        string mirrorUrl,
+        string installRoot,
+        string fileName,
+        Action<string> log)
+    {
+        string dir = Path.Combine(installRoot, "installers");
+        Directory.CreateDirectory(dir);
+        string path = Path.Combine(dir, fileName);
+        if (File.Exists(path) && new FileInfo(path).Length > 1024 * 1024)
+        {
+            log($"安装器已存在：{path}");
+            return path;
+        }
+
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            using HttpResponseMessage response = await Http
+                .GetAsync(directUrl, HttpCompletionOption.ResponseHeadersRead, cts.Token)
+                .ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            await using (Stream input = await response.Content.ReadAsStreamAsync(cts.Token).ConfigureAwait(false))
+            await using (FileStream output = File.Create(path))
+            {
+                await input.CopyToAsync(output, cts.Token).ConfigureAwait(false);
+            }
+
+            log("安装器直连下载成功");
+            return path;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException or IOException)
+        {
+            log($"直连下载失败（{ex.GetType().Name}），改用镜像");
+        }
+
+        log($"从镜像下载安装器：{mirrorUrl}");
+        using HttpResponseMessage mirrorResponse = await Http.GetAsync(mirrorUrl).ConfigureAwait(false);
+        mirrorResponse.EnsureSuccessStatusCode();
+        await using (Stream input = await mirrorResponse.Content.ReadAsStreamAsync().ConfigureAwait(false))
+        await using (FileStream output = File.Create(path))
+        {
+            await input.CopyToAsync(output).ConfigureAwait(false);
+        }
+
+        log($"安装器已下载：{new FileInfo(path).Length / 1024 / 1024} MB");
+        return path;
+    }
+
+    // 安装器里的库地址写死成 maven.neoforged.net，这里整包改写成 BMCLAPI 镜像。
+    private static string PatchNeoForgeInstaller(string installerPath, Action<string> log)
+    {
+        string patched = Path.Combine(
+            Path.GetDirectoryName(installerPath)!,
+            Path.GetFileNameWithoutExtension(installerPath) + "-mirror.jar");
+
+        if (File.Exists(patched))
+        {
+            File.Delete(patched);
+        }
+
+        using (ZipArchive source = ZipFile.OpenRead(installerPath))
+        using (var patchedStream = File.Create(patched))
+        using (var target = new ZipArchive(patchedStream, ZipArchiveMode.Create))
+        {
+            foreach (ZipArchiveEntry entry in source.Entries)
+            {
+                ZipArchiveEntry copy = target.CreateEntry(entry.FullName, CompressionLevel.Fastest);
+                using Stream input = entry.Open();
+                using Stream output = copy.Open();
+
+                if (entry.FullName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                {
+                    using var reader = new StreamReader(input);
+                    string text = reader.ReadToEnd()
+                        .Replace("https://maven.neoforged.net/releases/", NeoForgeMirrorBase)
+                        .Replace("https://maven.neoforged.net/", NeoForgeMirrorBase);
+                    using var writer = new StreamWriter(output);
+                    writer.Write(text);
+                }
+                else
+                {
+                    input.CopyTo(output);
+                }
+            }
+        }
+
+        log("已把安装器里的 maven 地址改写为 BMCLAPI 镜像");
+        return patched;
+    }
     private static async Task<string> DownloadInstallerAsync(string url, string installRoot, string fileName, Action<string> log)
     {
         string dir = Path.Combine(installRoot, "installers");
