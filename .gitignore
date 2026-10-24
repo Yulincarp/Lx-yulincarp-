@@ -491,3 +491,11 @@ cmd.txt
 official-cmd.txt
 launch-*.log
 ui-screenshot.png
+
+automodpack/
+config/
+logs/
+crash-reports/
+saves/
+options.txt
+servers.dat

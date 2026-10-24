@@ -263,6 +263,13 @@ public static class PackImporter
         log($"解压完成：{written.Count} 个文件");
 
         (string minecraft, string? loader) = DetectVersion(instanceDir);
+
+        string? modLoaderKind = DetectModLoader(instanceDir);
+        if (modLoaderKind is not null && !string.Equals(modLoaderKind, loader, StringComparison.OrdinalIgnoreCase))
+        {
+            log($"⚠ mods 里是 {modLoaderKind} 模组，需要用 {modLoaderKind} 的版本启动（Fabric 加载不了这些 mod）");
+        }
+
         var instance = new Instance(name, minecraft, loader, null);
         InstanceStore.AddOrUpdate(installRoot, instance);
 
@@ -497,6 +504,43 @@ public static class PackImporter
         {
             yield return match.Value;
         }
+    }
+
+    // 粗略判断 mods 属于哪种加载器：NeoForge/Forge 的 mod 带 META-INF/*.mods.toml。
+    private static string? DetectModLoader(string instanceDir)
+    {
+        string modsDir = Path.Combine(instanceDir, "mods");
+        if (!Directory.Exists(modsDir))
+        {
+            return null;
+        }
+
+        foreach (string jar in Directory.EnumerateFiles(modsDir, "*.jar").Take(40))
+        {
+            try
+            {
+                using ZipArchive zip = ZipFile.OpenRead(jar);
+                if (zip.GetEntry("META-INF/neoforge.mods.toml") is not null)
+                {
+                    return "NeoForge";
+                }
+
+                if (zip.GetEntry("META-INF/mods.toml") is not null)
+                {
+                    return "Forge";
+                }
+            }
+            catch (InvalidDataException)
+            {
+                // 不是 zip 就跳过
+            }
+            catch (IOException)
+            {
+                // 被占用就跳过
+            }
+        }
+
+        return null;
     }
 
     private static string SanitizeName(string name)
