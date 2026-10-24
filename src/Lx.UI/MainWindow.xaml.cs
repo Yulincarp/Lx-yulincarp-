@@ -108,7 +108,7 @@ public partial class MainWindow : Window
         {
             RefreshAccounts();
             AccountBox.SelectedItem = AccountStore.FindByName(_installRoot, dialog.Result.Name);
-            Log($"已登录：{dialog.Result.Type} {dialog.Result.Name}");
+            Log($"已登录：{dialog.Result.Type} {dialog.Result.Name}（角色 {dialog.Result.AvailableRoles?.Count ?? 0} 个）");
         }
     }
 
