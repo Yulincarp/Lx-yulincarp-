@@ -1,0 +1,32 @@
+<Window x:Class="Lx.UI.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Lx Launcher" Height="580" Width="920" FontSize="13">
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal">
+            <TextBlock Text="版本" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <ComboBox x:Name="VersionBox" Width="150" VerticalAlignment="Center"/>
+            <CheckBox x:Name="FabricCheck" Content="Fabric" Margin="16,0,0,0" VerticalAlignment="Center"/>
+            <TextBlock Text="账号" VerticalAlignment="Center" Margin="24,0,6,0"/>
+            <ComboBox x:Name="AccountBox" Width="190" VerticalAlignment="Center" DisplayMemberPath="Name"/>
+            <TextBlock Text="离线名" VerticalAlignment="Center" Margin="24,0,6,0"/>
+            <TextBox x:Name="NameBox" Width="110" VerticalAlignment="Center"/>
+            <Button x:Name="AddAccountButton" Content="添加" Margin="8,0,0,0" Padding="10,3" Click="AddAccount_Click"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,12,0,0">
+            <Button x:Name="LaunchButton" Content="启动游戏" Padding="20,6" Click="Launch_Click"/>
+            <TextBlock x:Name="StatusText" Margin="16,0,0,0" VerticalAlignment="Center" Foreground="Gray"/>
+        </StackPanel>
+
+        <TextBox Grid.Row="2" x:Name="LogBox" Margin="0,12,0,0" IsReadOnly="True"
+                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                 FontFamily="Consolas" FontSize="12" TextWrapping="NoWrap"/>
+    </Grid>
+</Window>
