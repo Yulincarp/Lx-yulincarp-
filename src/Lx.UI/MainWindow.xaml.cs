@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Lx.Probe.Auth;
 using Lx.Probe.Instances;
+using Lx.Probe.Loaders;
 using Lx.Probe.Launch;
 using Lx.Probe.Model;
 using Lx.Probe.Modpacks;
@@ -249,8 +250,52 @@ public partial class MainWindow : Window
                 message => Dispatcher.Invoke(() => Log(message)),
                 cfKey);
 
-            RefreshInstances(imported.Name);
-            Log($"整合包导入完成：{imported.Name}");
+            RefreshInstances(imported.Instance.Name);
+            Log($"整合包导入完成：{imported.Instance.Name}（{imported.Files.Count} 个文件）");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        {
+            Log($"[错误] {ex.Message}");
+        }
+    }
+
+    private async void UpdatePack_Click(object sender, RoutedEventArgs e)
+    {
+        if (InstancesList.SelectedItem is not Instance instance)
+        {
+            Log("先选中一个实例");
+            return;
+        }
+
+        string dir = InstanceStore.DirFor(_installRoot, instance.Name);
+        try
+        {
+            int removed = await PackImporter.UpdateAsync(
+                dir,
+                _installRoot,
+                message => Dispatcher.Invoke(() => Log(message)));
+
+            Log($"整合包更新完成，清理了 {removed} 个旧文件");
+            RefreshMods();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        {
+            Log($"[错误] {ex.Message}");
+        }
+    }
+
+    private async void InstallOptiFabric_Click(object sender, RoutedEventArgs e)
+    {
+        string version = (VersionBox.SelectedItem as ManifestVersion)?.Id ?? "1.20.4";
+        try
+        {
+            await OptiFineHelper.InstallOptiFabricAsync(
+                _installRoot,
+                version,
+                CurrentGameDir(),
+                message => Dispatcher.Invoke(() => Log(message)));
+
+            RefreshMods();
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException)
         {

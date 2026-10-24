@@ -45,6 +45,7 @@
                             <Button Content="新建" Click="CreateInstance_Click" Padding="12,3"/>
                             <Button Content="删除" Click="DeleteInstance_Click" Padding="12,3" Margin="8,0,0,0"/>
                             <Button Content="导入" Click="ImportPack_Click" Padding="12,3" Margin="8,0,0,0"/>
+                            <Button Content="更新包" Click="UpdatePack_Click" Padding="12,3" Margin="8,0,0,0"/>
                         </StackPanel>
                     </StackPanel>
                     <ListBox x:Name="InstancesList" Margin="0,8,0,0"
@@ -72,6 +73,7 @@
                             <Button Content="添加" Click="AddMod_Click" Padding="10,3" Margin="8,0,0,0"/>
                             <Button Content="删除" Click="RemoveMod_Click" Padding="10,3" Margin="8,0,0,0"/>
                             <Button Content="检查更新" Click="CheckUpdates_Click" Padding="10,3" Margin="8,0,0,0"/>
+                            <Button Content="OptiFabric" Click="InstallOptiFabric_Click" Padding="10,3" Margin="8,0,0,0"/>
                         </StackPanel>
                         <TextBlock x:Name="ModsPathText" Foreground="Gray" FontSize="11"
                                    Margin="0,0,0,8" TextTrimming="CharacterEllipsis"/>

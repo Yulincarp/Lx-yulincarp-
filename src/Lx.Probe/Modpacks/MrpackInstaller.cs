@@ -77,7 +77,7 @@ public static class MrpackInstaller
         return new MrpackIndex(name, versionId, minecraft, fabricLoader, files, overrides);
     }
 
-    public static async Task<Instance> ImportAsync(string mrpackPath, string installRoot, Action<string> log)
+    public static async Task<PackImportResult> ImportAsync(string mrpackPath, string installRoot, Action<string> log)
     {
         MrpackIndex index = ReadIndex(mrpackPath);
 
@@ -115,7 +115,8 @@ public static class MrpackInstaller
             log($"整合包文件：{items.Count} 个，失败 {failed} 个");
         }
 
-        ExtractOverrides(mrpackPath, instanceDir, log);
+        List<string> written = items.Select(item => item.RelativePath).ToList();
+        written.AddRange(ExtractOverrides(mrpackPath, instanceDir, log));
 
         var instance = new Instance(
             name,
@@ -126,14 +127,15 @@ public static class MrpackInstaller
         InstanceStore.AddOrUpdate(installRoot, instance);
         log($"实例已创建：{name}（{index.MinecraftVersion}{(index.FabricLoaderVersion is null ? string.Empty : " + Fabric " + index.FabricLoaderVersion)}）");
 
-        return instance;
+        return new PackImportResult(instance, index.VersionId, written);
     }
 
-    private static void ExtractOverrides(string mrpackPath, string instanceDir, Action<string> log)
+    private static List<string> ExtractOverrides(string mrpackPath, string instanceDir, Action<string> log)
     {
         using ZipArchive zip = ZipFile.OpenRead(mrpackPath);
         string root = Path.GetFullPath(instanceDir) + Path.DirectorySeparatorChar;
         int count = 0;
+        var written = new List<string>();
 
         foreach (ZipArchiveEntry entry in zip.Entries)
         {
@@ -167,6 +169,7 @@ public static class MrpackInstaller
             {
                 entry.ExtractToFile(destination, overwrite: true);
                 count++;
+                written.Add(relative.Replace('\\', '/'));
             }
             catch (IOException)
             {
@@ -175,5 +178,6 @@ public static class MrpackInstaller
         }
 
         log($"overrides 解压：{count} 个文件");
+        return written;
     }
 }

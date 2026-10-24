@@ -26,6 +26,8 @@ string? modsTarget = null;
 string? importArg = null;
 string? cfKeyArg = null;
 string? installLoaderArg = null;
+bool updatePackFlag = false;
+bool installOptiFabricFlag = false;
 string? accountArg = null;
 bool listOnly = false;
 bool listAccounts = false;
@@ -87,6 +89,14 @@ for (int i = 0; i < args.Length; i++)
     {
         installLoaderArg = args[++i];
     }
+    else if (arg == "--update-pack")
+    {
+        updatePackFlag = true;
+    }
+    else if (arg == "--install-optifabric")
+    {
+        installOptiFabricFlag = true;
+    }
     else if (arg == "--loader-version" && i + 1 < args.Length)
     {
         loaderVersionArg = args[++i];
@@ -146,6 +156,45 @@ if (installLoaderArg is not null)
     }
 }
 
+if (updatePackFlag)
+{
+    if (gameDirArg is null)
+    {
+        Console.WriteLine("[错误] --update-pack 需要 --game-dir <实例目录>");
+        return 1;
+    }
+
+    try
+    {
+        int removed = await PackImporter.UpdateAsync(Path.GetFullPath(gameDirArg), installRoot, Console.WriteLine);
+        Console.WriteLine($"更新结束，清理了 {removed} 个旧文件");
+        return 0;
+    }
+    catch (Exception ex) when (ex is InvalidOperationException or IOException)
+    {
+        Console.WriteLine($"[错误] {ex.Message}");
+        return 1;
+    }
+}
+
+if (installOptiFabricFlag)
+{
+    string targetDir = gameDirArg is not null
+        ? Path.GetFullPath(gameDirArg)
+        : Path.Combine(installRoot, "versions", versionId);
+
+    try
+    {
+        await OptiFineHelper.InstallOptiFabricAsync(installRoot, versionId, targetDir, Console.WriteLine);
+        return 0;
+    }
+    catch (Exception ex) when (ex is InvalidOperationException or IOException)
+    {
+        Console.WriteLine($"[错误] {ex.Message}");
+        return 1;
+    }
+}
+
 if (modsAction is not null)
 {
     string modsGameDir = gameDirArg is not null
@@ -171,8 +220,8 @@ if (importArg is not null)
         }
 
         string? cfKey = CurseForgeClient.ResolveKey(installRoot, cfKeyArg);
-        Instance imported = await PackImporter.ImportAsync(importArg, installRoot, Console.WriteLine, cfKey);
-        Console.WriteLine($"导入完成：{imported.Name}（{imported.VersionId}）");
+        PackImportResult imported = await PackImporter.ImportAsync(importArg, installRoot, Console.WriteLine, cfKey);
+        Console.WriteLine($"导入完成：{imported.Instance.Name}（{imported.Instance.VersionId}），{imported.Files.Count} 个文件");
         return 0;
     }
     catch (Exception ex) when (ex is InvalidOperationException or IOException or JsonException)

@@ -41,17 +41,57 @@ public static class PackImporter
         return PackKind.Generic;
     }
 
-    public static async Task<Instance> ImportAsync(string path, string installRoot, Action<string> log, string? curseForgeKey = null)
+    public static async Task<PackImportResult> ImportAsync(
+        string path,
+        string installRoot,
+        Action<string> log,
+        string? curseForgeKey = null)
     {
         PackKind kind = DetectKind(path);
         log($"识别格式：{Describe(kind)}");
 
-        return kind switch
+        PackImportResult result = kind switch
         {
             PackKind.Modrinth => await MrpackInstaller.ImportAsync(path, installRoot, log).ConfigureAwait(false),
             PackKind.CurseForge => await ImportCurseForgeAsync(path, installRoot, log, curseForgeKey).ConfigureAwait(false),
             _ => await ImportGenericAsync(path, installRoot, log).ConfigureAwait(false),
         };
+
+        string instanceDir = InstanceStore.DirFor(installRoot, result.Instance.Name);
+        PackRecord.Save(instanceDir, new PackRecord(path, result.Instance.Name, result.Version, result.Files));
+        return result;
+    }
+
+    // 用原整合包重新导入一次，再删掉旧清单里有、新包里没有的文件（只删我们装过的）。
+    public static async Task<int> UpdateAsync(string instanceDir, string installRoot, Action<string> log)
+    {
+        PackRecord? record = PackRecord.Load(instanceDir);
+        if (record is null)
+        {
+            throw new InvalidOperationException("这个实例不是导入的整合包（没有 pack.json）");
+        }
+
+        if (!File.Exists(record.SourcePath))
+        {
+            throw new InvalidOperationException($"找不到原整合包：{record.SourcePath}");
+        }
+
+        PackImportResult result = await ImportAsync(record.SourcePath, installRoot, log).ConfigureAwait(false);
+
+        var newFiles = new HashSet<string>(result.Files, StringComparer.OrdinalIgnoreCase);
+        int deleted = 0;
+        foreach (string stale in record.Files.Where(file => !newFiles.Contains(file)))
+        {
+            string full = Path.Combine(instanceDir, stale.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(full))
+            {
+                File.Delete(full);
+                deleted++;
+            }
+        }
+
+        log($"更新完成：{record.PackName} {record.PackVersion} → {result.Version}，删除 {deleted} 个旧文件");
+        return deleted;
     }
 
     private static string Describe(PackKind kind) => kind switch
@@ -63,13 +103,19 @@ public static class PackImporter
 
     // ---------- CurseForge ----------
 
-    private static async Task<Instance> ImportCurseForgeAsync(string path, string installRoot, Action<string> log, string? apiKey)
+    private static async Task<PackImportResult> ImportCurseForgeAsync(
+        string path,
+        string installRoot,
+        Action<string> log,
+        string? apiKey)
     {
         JsonArray? fileNodes;
         string name;
         string minecraft;
+        string packVersion;
         string? loader;
         string instanceDir;
+        List<string> overrides;
 
         using (IArchive archive = ArchiveFactory.Open(path))
         {
@@ -83,6 +129,7 @@ public static class PackImporter
             name = SanitizeName(manifest["name"]?.GetValue<string>() ?? Path.GetFileNameWithoutExtension(path));
             minecraft = manifest["minecraft"]?["version"]?.GetValue<string>()
                         ?? throw new InvalidOperationException("manifest 里没有 minecraft.version");
+            packVersion = manifest["version"]?.GetValue<string>() ?? "1.0";
 
             string? loaderId = (manifest["minecraft"]?["modLoaders"] as JsonArray)?
                 .FirstOrDefault(node => node?["primary"]?.GetValue<bool>() == true)?["id"]?.GetValue<string>();
@@ -100,8 +147,10 @@ public static class PackImporter
 
             instanceDir = InstanceStore.DirFor(installRoot, name);
             Directory.CreateDirectory(instanceDir);
-            ExtractPrefix(archive, entries, "overrides/", instanceDir, log);
+            overrides = ExtractPrefix(entries, "overrides/", instanceDir, log);
         }
+
+        var files = new List<string>(overrides);
 
         int fileCount = fileNodes?.Count ?? 0;
         if (fileCount > 0)
@@ -113,7 +162,7 @@ public static class PackImporter
             }
             else
             {
-                await DownloadCurseForgeFilesAsync(fileNodes!, instanceDir, apiKey, log).ConfigureAwait(false);
+                files.AddRange(await DownloadCurseForgeFilesAsync(fileNodes!, instanceDir, apiKey, log).ConfigureAwait(false));
             }
         }
 
@@ -121,11 +170,16 @@ public static class PackImporter
         InstanceStore.AddOrUpdate(installRoot, instance);
 
         log($"CurseForge 包：{name}（{minecraft}{(loader is null ? string.Empty : " + Fabric")}）");
-        return instance;
+        return new PackImportResult(instance, packVersion, files);
     }
 
-    private static async Task DownloadCurseForgeFilesAsync(JsonArray files, string instanceDir, string apiKey, Action<string> log)
+    private static async Task<List<string>> DownloadCurseForgeFilesAsync(
+        JsonArray files,
+        string instanceDir,
+        string apiKey,
+        Action<string> log)
     {
+        var written = new List<string>();
         var ids = new List<long>();
         foreach (JsonNode? node in files)
         {
@@ -138,7 +192,7 @@ public static class PackImporter
 
         if (ids.Count == 0)
         {
-            return;
+            return written;
         }
 
         Dictionary<long, CurseForgeFile> map = await CurseForgeClient.GetFilesAsync(ids, apiKey, log).ConfigureAwait(false);
@@ -160,7 +214,9 @@ public static class PackImporter
                 continue;
             }
 
-            items.Add(new DownloadItem(file.DownloadUrl, "mods/" + file.FileName, file.Sha1 ?? string.Empty, file.Size));
+            string relative = "mods/" + file.FileName;
+            items.Add(new DownloadItem(file.DownloadUrl, relative, file.Sha1 ?? string.Empty, file.Size));
+            written.Add(relative);
         }
 
         if (noUrl > 0)
@@ -173,19 +229,19 @@ public static class PackImporter
             log($"⚠ {missing} 个文件 CurseForge 没有返回信息");
         }
 
-        if (items.Count == 0)
+        if (items.Count > 0)
         {
-            return;
+            log($"开始下载 {items.Count} 个文件…");
+            int failed = await Downloader.DownloadAllAsync(items, instanceDir).ConfigureAwait(false);
+            log($"CurseForge 文件下载完成，失败 {failed} 个");
         }
 
-        log($"开始下载 {items.Count} 个文件…");
-        int failed = await Downloader.DownloadAllAsync(items, instanceDir).ConfigureAwait(false);
-        log($"CurseForge 文件下载完成，失败 {failed} 个");
+        return written;
     }
 
     // ---------- 通用整合包 ----------
 
-    private static async Task<Instance> ImportGenericAsync(string path, string installRoot, Action<string> log)
+    private static async Task<PackImportResult> ImportGenericAsync(string path, string installRoot, Action<string> log)
     {
         using IArchive archive = ArchiveFactory.Open(path);
         List<IArchiveEntry> entries = archive.Entries
@@ -203,8 +259,8 @@ public static class PackImporter
         string instanceDir = InstanceStore.DirFor(installRoot, name);
         Directory.CreateDirectory(instanceDir);
 
-        int written = ExtractEntries(entries, commonRoot, instanceDir, log);
-        log($"解压完成：{written} 个文件");
+        List<string> written = ExtractEntries(entries, commonRoot, instanceDir, log);
+        log($"解压完成：{written.Count} 个文件");
 
         (string minecraft, string? loader) = DetectVersion(instanceDir);
         var instance = new Instance(name, minecraft, loader, null);
@@ -212,15 +268,15 @@ public static class PackImporter
 
         log($"实例已创建：{name}（{minecraft}{(loader is null ? string.Empty : " + Fabric")}）");
         await Task.CompletedTask.ConfigureAwait(false);
-        return instance;
+        return new PackImportResult(instance, "local", written);
     }
 
     // ---------- 压缩包工具 ----------
 
-    private static int ExtractEntries(List<IArchiveEntry> entries, string? stripPrefix, string destRoot, Action<string> log)
+    private static List<string> ExtractEntries(List<IArchiveEntry> entries, string? stripPrefix, string destRoot, Action<string> log)
     {
         string root = Path.GetFullPath(destRoot) + Path.DirectorySeparatorChar;
-        int count = 0;
+        var written = new List<string>();
 
         foreach (IArchiveEntry entry in entries)
         {
@@ -247,7 +303,7 @@ public static class PackImporter
                 using Stream input = entry.OpenEntryStream();
                 using FileStream output = File.Create(destination);
                 input.CopyTo(output);
-                count++;
+                written.Add(key);
             }
             catch (IOException ex)
             {
@@ -255,19 +311,21 @@ public static class PackImporter
             }
         }
 
-        return count;
+        return written;
     }
 
-    private static void ExtractPrefix(IArchive archive, List<IArchiveEntry> entries, string prefix, string destRoot, Action<string> log)
+    private static List<string> ExtractPrefix(List<IArchiveEntry> entries, string prefix, string destRoot, Action<string> log)
     {
-        List<IArchiveEntry> matches = entries
-            .Where(entry => entry.Key.Replace('\\', '/').StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        int count = 0;
-        foreach (IArchiveEntry entry in matches)
+        var written = new List<string>();
+        foreach (IArchiveEntry entry in entries)
         {
-            string key = entry.Key.Replace('\\', '/')[prefix.Length..];
+            string full = entry.Key.Replace('\\', '/');
+            if (!full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string key = full[prefix.Length..];
             if (key.Length == 0)
             {
                 continue;
@@ -278,10 +336,11 @@ public static class PackImporter
             using Stream input = entry.OpenEntryStream();
             using FileStream output = File.Create(destination);
             input.CopyTo(output);
-            count++;
+            written.Add(key);
         }
 
-        log($"{prefix} 解压：{count} 个文件");
+        log($"{prefix} 解压：{written.Count} 个文件");
+        return written;
     }
 
     private static JsonNode? ReadJson(IArchiveEntry entry)
@@ -307,7 +366,7 @@ public static class PackImporter
             int slash = key.IndexOf('/');
             if (slash <= 0)
             {
-                return null; // 根目录有文件，不是单层结构
+                return null;
             }
 
             string first = key[..slash];
@@ -327,7 +386,6 @@ public static class PackImporter
     // 从 mods 的 fabric.mod.json 里猜 Minecraft 版本；猜不到就用 1.20.4。
     private static (string Minecraft, string? Loader) DetectVersion(string instanceDir)
     {
-        // Prism / MultiMC 的 mmc-pack.json 最准
         string mmc = Path.Combine(instanceDir, "mmc-pack.json");
         if (File.Exists(mmc))
         {

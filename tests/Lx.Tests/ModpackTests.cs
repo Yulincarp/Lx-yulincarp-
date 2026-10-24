@@ -151,7 +151,8 @@ public class PackImporterTests
                 AddEntry(inner, "fabric.mod.json", "{\"id\":\"example\",\"depends\":{\"minecraft\":\"1.20.1\"}}");
             }
 
-            Instance imported = await PackImporter.ImportAsync(pack2, installRoot, _ => { });
+            PackImportResult result = await PackImporter.ImportAsync(pack2, installRoot, _ => { });
+            Instance imported = result.Instance;
 
             Assert.Equal("MyPack", imported.Name);
             Assert.Equal("1.20.1", imported.VersionId);

@@ -92,6 +92,29 @@ public static class ModrinthClient
             file?["size"]?.GetValue<long>() ?? 0);
     }
 
+    // 取某个项目（slug 或 id）在指定版本/加载器下的最新文件，用于“一键装 mod”。
+    public static async Task<(string Url, string FileName, string? Sha1, long Size)?> GetLatestFileAsync(
+        string projectSlug,
+        string gameVersion,
+        string loader)
+    {
+        JsonArray? versions = await GetProjectVersionsAsync(projectSlug, gameVersion, loader).ConfigureAwait(false);
+        if (versions is null || versions.Count == 0)
+        {
+            return null;
+        }
+
+        JsonNode? file = PickPrimaryFile(versions[0]!);
+        string? url = file?["url"]?.GetValue<string>();
+        string? fileName = file?["filename"]?.GetValue<string>();
+        if (url is null || fileName is null)
+        {
+            return null;
+        }
+
+        return (url, fileName, file?["hashes"]?["sha1"]?.GetValue<string>(), file?["size"]?.GetValue<long>() ?? 0);
+    }
+
     private static async Task<string> GetProjectTitleAsync(string projectId)
     {
         try
