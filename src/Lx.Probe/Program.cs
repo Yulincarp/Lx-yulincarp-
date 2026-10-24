@@ -9,6 +9,8 @@ string? rootArg = null;
 string? versionArg = null;
 string? authArg = null;
 string? nameArg = null;
+string? apiArg = null;
+string? emailArg = null;
 bool listOnly = false;
 
 for (int i = 0; i < args.Length; i++)
@@ -33,6 +35,14 @@ for (int i = 0; i < args.Length; i++)
     else if (arg == "--name" && i + 1 < args.Length)
     {
         nameArg = args[++i];
+    }
+    else if (arg == "--api" && i + 1 < args.Length)
+    {
+        apiArg = args[++i];
+    }
+    else if (arg == "--email" && i + 1 < args.Length)
+    {
+        emailArg = args[++i];
     }
     else if (!arg.StartsWith("--", StringComparison.Ordinal))
     {
@@ -74,11 +84,32 @@ switch (authType)
     case "offline":
         account = OfflineAuth.Create(nameArg ?? "Player");
         break;
+    case "yggdrasil":
+        if (apiArg is null || emailArg is null)
+        {
+            Console.WriteLine("[错误] 外置登录需要 --api <站点根> 和 --email <账号>");
+            return 1;
+        }
+        string password = ConsolePrompt.ReadPassword("密码（不会保存）：");
+        try
+        {
+            account = await YggdrasilAuth.LoginAsync(apiArg, emailArg, password);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.WriteLine($"[错误] {ex.Message}");
+            return 1;
+        }
+        catch (HttpRequestException ex)
+        {
+            Console.WriteLine($"[错误] 连不上 {apiArg}：{ex.Message}");
+            return 1;
+        }
+        break;
     default:
-        Console.WriteLine($"[错误] 暂不支持的登录方式：{authType}（目前只有 offline）");
+        Console.WriteLine($"[错误] 暂不支持的登录方式：{authType}（offline / yggdrasil）");
         return 1;
 }
-
 AccountStore.Save(installRoot, account);
 Console.WriteLine($"账号：{account.Type} {account.Name} {account.Uuid}");
 
@@ -176,7 +207,12 @@ var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     ["assets_index_name"] = v.Assets ?? "12",
     ["auth_uuid"] = account.Uuid,
     ["auth_access_token"] = account.AccessToken,
-    ["user_type"] = account.Type == "microsoft" ? "msa" : "legacy",
+    ["user_type"] = account.Type switch
+    {
+        "microsoft" => "msa",
+        "yggdrasil" => "mojang",
+        _ => "legacy",
+    },
     ["version_type"] = "release",
     ["natives_directory"] = nativesDir,
     ["launcher_name"] = "lx",
@@ -189,6 +225,19 @@ var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 };
 
 List<string> jvmArgs = ArgumentExpander.Expand(v.Arguments?.Jvm, values, features);
+
+// 外置登录：把 authlib-injector 挂成 javaagent，位置必须在 -cp 和 mainClass 之前。
+if (account.Type == "yggdrasil")
+{
+    string injector = Path.Combine(installRoot, "authlib-injector.jar");
+    if (!File.Exists(injector))
+    {
+        Console.WriteLine($"[错误] 缺少 {injector}");
+        return 1;
+    }
+
+    jvmArgs.Insert(0, $"-javaagent:{injector}={account.ApiRoot}");
+}
 List<string> gameArgs = ArgumentExpander.Expand(v.Arguments?.Game, values, features);
 string commandLine = CommandLineBuilder.Build("java", jvmArgs, v.MainClass ?? string.Empty, gameArgs);
 
