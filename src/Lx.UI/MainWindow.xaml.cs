@@ -1,11 +1,13 @@
 using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using Lx.Probe.Auth;
 using Lx.Probe.Instances;
 using Lx.Probe.Launch;
 using Lx.Probe.Model;
+using Lx.Probe.Modpacks;
 using Lx.Probe.Mods;
 using Lx.Probe.Resolve;
 using Microsoft.Win32;
@@ -201,6 +203,35 @@ public partial class MainWindow : Window
         Log($"已创建实例：{name}（{version}）→ {InstanceStore.DirFor(_installRoot, name)}");
     }
 
+    private async void ImportPack_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "Modrinth 整合包 (*.mrpack)|*.mrpack",
+            Title = "选择整合包",
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        try
+        {
+            var imported = await MrpackInstaller.ImportAsync(
+                dialog.FileName,
+                _installRoot,
+                message => Dispatcher.Invoke(() => Log(message)));
+
+            RefreshInstances(imported.Name);
+            Log($"整合包导入完成：{imported.Name}");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        {
+            Log($"[错误] {ex.Message}");
+        }
+    }
+
     private void DeleteInstance_Click(object sender, RoutedEventArgs e)
     {
         if (InstancesList.SelectedItem is not Instance instance)
@@ -296,6 +327,88 @@ public partial class MainWindow : Window
         };
 
         ModsList.ItemsSource = filtered.ToList();
+    }
+
+    private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        string gameDir = CurrentGameDir();
+        List<ModFile> enabled = ModManager.List(gameDir).Where(mod => mod.Enabled).ToList();
+        if (enabled.Count == 0)
+        {
+            Log("没有启用的 mod");
+            return;
+        }
+
+        string version = (VersionBox.SelectedItem as ManifestVersion)?.Id ?? "1.20.4";
+        const string loader = "fabric"; // 目前只有 Fabric 有 mod
+        var updates = new List<ModUpdate>();
+
+        foreach (ModFile mod in enabled)
+        {
+            string path = Path.Combine(ModManager.ModsDir(gameDir), mod.FileName);
+            try
+            {
+                ModUpdate? update = await ModrinthClient.CheckAsync(path, version, loader);
+                if (update is null)
+                {
+                    Log($"[最新] {mod.DisplayName} {mod.Version}");
+                    continue;
+                }
+
+                updates.Add(update);
+                Log($"[可更新] {update.ProjectTitle} {update.CurrentVersion} → {update.LatestVersion}");
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException)
+            {
+                Log($"[错误] {mod.FileName}: {ex.Message}");
+            }
+        }
+
+        if (updates.Count == 0)
+        {
+            Log("全部已是最新");
+            return;
+        }
+
+        MessageBoxResult choice = MessageBox.Show(
+            $"发现 {updates.Count} 个更新，现在下载吗？",
+            "mod 更新",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (choice != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        int done = 0;
+        foreach (ModUpdate update in updates)
+        {
+            var item = new DownloadItem(
+                update.DownloadUrl,
+                "mods/" + update.NewFileName,
+                update.Sha1 ?? string.Empty,
+                update.Size);
+
+            int failed = await Downloader.DownloadAllAsync(new[] { item }, gameDir);
+            if (failed > 0)
+            {
+                Log($"[失败] {update.ProjectTitle} 下载失败");
+                continue;
+            }
+
+            string oldPath = Path.Combine(ModManager.ModsDir(gameDir), update.FileName);
+            if (File.Exists(oldPath))
+            {
+                File.Delete(oldPath);
+            }
+
+            done++;
+            Log($"[已更新] {update.ProjectTitle} → {update.LatestVersion}");
+        }
+
+        Log($"更新完成：{done}/{updates.Count}");
+        RefreshMods();
     }
 
     private void ModCheck_Click(object sender, RoutedEventArgs e)

@@ -1,6 +1,9 @@
+using System.Text.Json;
 using Lx.Probe.Auth;
+using Lx.Probe.Instances;
 using Lx.Probe.Launch;
 using Lx.Probe.Model;
+using Lx.Probe.Modpacks;
 using Lx.Probe.Mods;
 using Lx.Probe.Resolve;
 
@@ -19,6 +22,7 @@ string? loaderVersionArg = null;
 string? gameDirArg = null;
 string? modsAction = null;
 string? modsTarget = null;
+string? importArg = null;
 string? accountArg = null;
 bool listOnly = false;
 bool listAccounts = false;
@@ -52,6 +56,10 @@ for (int i = 0; i < args.Length; i++)
     {
         rootArg = args[++i];
     }
+    else if (arg == "--import" && i + 1 < args.Length)
+    {
+        importArg = args[++i];
+    }
     else if (arg == "--game-dir" && i + 1 < args.Length)
     {
         gameDirArg = args[++i];
@@ -59,7 +67,7 @@ for (int i = 0; i < args.Length; i++)
     else if (arg == "--mods" && i + 1 < args.Length)
     {
         modsAction = args[++i].ToLowerInvariant();
-        if (modsAction != "list" && i + 1 < args.Length)
+        if (modsAction != "list" && modsAction != "check" && i + 1 < args.Length)
         {
             modsTarget = args[++i];
         }
@@ -110,7 +118,28 @@ if (modsAction is not null)
     string modsGameDir = gameDirArg is not null
         ? Path.GetFullPath(gameDirArg)
         : Path.Combine(installRoot, "versions", versionId);
+
+    if (modsAction == "check")
+    {
+        return await CheckModsAsync(modsGameDir, versionId, loaderArg ?? "fabric");
+    }
+
     return RunMods(modsAction, modsTarget, modsGameDir);
+}
+
+if (importArg is not null)
+{
+    try
+    {
+        Instance imported = await MrpackInstaller.ImportAsync(importArg, installRoot, Console.WriteLine);
+        Console.WriteLine($"导入完成：{imported.Name}（{imported.VersionId}）");
+        return 0;
+    }
+    catch (Exception ex) when (ex is InvalidOperationException or IOException or JsonException)
+    {
+        Console.WriteLine($"[错误] {ex.Message}");
+        return 1;
+    }
 }
 
 if (listAccounts)
@@ -324,7 +353,43 @@ static int RunMods(string action, string? target, string gameDir)
             return removed ? 0 : 1;
 
         default:
-            Console.WriteLine("[错误] --mods 支持 list / enable / disable / add / remove");
+            Console.WriteLine("[错误] --mods 支持 list / enable / disable / add / remove / check");
             return 1;
     }
+}
+
+// 检查所有启用 mod 的更新（Modrinth，按文件 sha1 反查版本）。
+static async Task<int> CheckModsAsync(string gameDir, string gameVersion, string loader)
+{
+    List<ModFile> mods = ModManager.List(gameDir);
+    if (mods.Count == 0)
+    {
+        Console.WriteLine("（没有 mod）");
+        return 0;
+    }
+
+    int updates = 0;
+    foreach (ModFile mod in mods.Where(m => m.Enabled))
+    {
+        string path = Path.Combine(ModManager.ModsDir(gameDir), mod.FileName);
+        try
+        {
+            ModUpdate? update = await ModrinthClient.CheckAsync(path, gameVersion, loader);
+            if (update is null)
+            {
+                Console.WriteLine($"  [最新]   {mod.DisplayName} {mod.Version}");
+                continue;
+            }
+
+            updates++;
+            Console.WriteLine($"  [可更新] {update.ProjectTitle} {update.CurrentVersion} → {update.LatestVersion}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  [错误]   {mod.FileName}: {ex.Message}");
+        }
+    }
+
+    Console.WriteLine($"检查完成：可更新 {updates} 个");
+    return 0;
 }
