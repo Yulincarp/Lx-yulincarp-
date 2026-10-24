@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Lx.Probe.Instances;
+using Lx.Probe.Resolve;
 using SharpCompress.Archives;
 
 namespace Lx.Probe.Modpacks;
@@ -40,7 +41,7 @@ public static class PackImporter
         return PackKind.Generic;
     }
 
-    public static async Task<Instance> ImportAsync(string path, string installRoot, Action<string> log)
+    public static async Task<Instance> ImportAsync(string path, string installRoot, Action<string> log, string? curseForgeKey = null)
     {
         PackKind kind = DetectKind(path);
         log($"识别格式：{Describe(kind)}");
@@ -48,7 +49,7 @@ public static class PackImporter
         return kind switch
         {
             PackKind.Modrinth => await MrpackInstaller.ImportAsync(path, installRoot, log).ConfigureAwait(false),
-            PackKind.CurseForge => ImportCurseForge(path, installRoot, log),
+            PackKind.CurseForge => await ImportCurseForgeAsync(path, installRoot, log, curseForgeKey).ConfigureAwait(false),
             _ => await ImportGenericAsync(path, installRoot, log).ConfigureAwait(false),
         };
     }
@@ -62,48 +63,124 @@ public static class PackImporter
 
     // ---------- CurseForge ----------
 
-    private static Instance ImportCurseForge(string path, string installRoot, Action<string> log)
+    private static async Task<Instance> ImportCurseForgeAsync(string path, string installRoot, Action<string> log, string? apiKey)
     {
-        using IArchive archive = ArchiveFactory.Open(path);
-        List<IArchiveEntry> entries = archive.Entries.Where(entry => !entry.IsDirectory).ToList();
+        JsonArray? fileNodes;
+        string name;
+        string minecraft;
+        string? loader;
+        string instanceDir;
 
-        IArchiveEntry manifestEntry = entries.First(entry =>
-            entry.Key.Replace('\\', '/').EndsWith("manifest.json", StringComparison.OrdinalIgnoreCase));
-
-        JsonNode manifest = ReadJson(manifestEntry) ?? throw new InvalidOperationException("manifest.json 解析失败");
-
-        string name = SanitizeName(manifest["name"]?.GetValue<string>() ?? Path.GetFileNameWithoutExtension(path));
-        string minecraft = manifest["minecraft"]?["version"]?.GetValue<string>()
-                           ?? throw new InvalidOperationException("manifest 里没有 minecraft.version");
-
-        string? loaderId = (manifest["minecraft"]?["modLoaders"] as JsonArray)?
-            .FirstOrDefault(node => node?["primary"]?.GetValue<bool>() == true)?["id"]?.GetValue<string>();
-
-        string? loader = loaderId is not null && loaderId.StartsWith("fabric", StringComparison.OrdinalIgnoreCase)
-            ? "fabric"
-            : null;
-
-        if (loaderId is not null && loader is null)
+        using (IArchive archive = ArchiveFactory.Open(path))
         {
-            log($"⚠ 这个包用的是 {loaderId}，当前只支持 Fabric 启动；文件会导入，但无法直接启动。");
+            List<IArchiveEntry> entries = archive.Entries.Where(entry => !entry.IsDirectory).ToList();
+
+            IArchiveEntry manifestEntry = entries.First(entry =>
+                entry.Key.Replace('\\', '/').EndsWith("manifest.json", StringComparison.OrdinalIgnoreCase));
+
+            JsonNode manifest = ReadJson(manifestEntry) ?? throw new InvalidOperationException("manifest.json 解析失败");
+
+            name = SanitizeName(manifest["name"]?.GetValue<string>() ?? Path.GetFileNameWithoutExtension(path));
+            minecraft = manifest["minecraft"]?["version"]?.GetValue<string>()
+                        ?? throw new InvalidOperationException("manifest 里没有 minecraft.version");
+
+            string? loaderId = (manifest["minecraft"]?["modLoaders"] as JsonArray)?
+                .FirstOrDefault(node => node?["primary"]?.GetValue<bool>() == true)?["id"]?.GetValue<string>();
+
+            loader = loaderId is not null && loaderId.StartsWith("fabric", StringComparison.OrdinalIgnoreCase)
+                ? "fabric"
+                : null;
+
+            if (loaderId is not null && loader is null)
+            {
+                log($"⚠ 这个包用的是 {loaderId}，当前只支持 Fabric 启动；文件会导入，但无法直接启动。");
+            }
+
+            fileNodes = manifest["files"] as JsonArray;
+
+            instanceDir = InstanceStore.DirFor(installRoot, name);
+            Directory.CreateDirectory(instanceDir);
+            ExtractPrefix(archive, entries, "overrides/", instanceDir, log);
         }
 
-        int fileCount = (manifest["files"] as JsonArray)?.Count ?? 0;
-        string instanceDir = InstanceStore.DirFor(installRoot, name);
-        Directory.CreateDirectory(instanceDir);
-
-        ExtractPrefix(archive, entries, "overrides/", instanceDir, log);
+        int fileCount = fileNodes?.Count ?? 0;
+        if (fileCount > 0)
+        {
+            if (apiKey is null)
+            {
+                log("⚠ 没配置 CurseForge API key，跳过 mod 下载（只导入了 overrides 和配置）。");
+                log("  用 --cf-key <key>，或把 key 写进 minecraft\\curseforge-key.txt（curseforge.com 免费申请）。");
+            }
+            else
+            {
+                await DownloadCurseForgeFilesAsync(fileNodes!, instanceDir, apiKey, log).ConfigureAwait(false);
+            }
+        }
 
         var instance = new Instance(name, minecraft, loader, null);
         InstanceStore.AddOrUpdate(installRoot, instance);
 
         log($"CurseForge 包：{name}（{minecraft}{(loader is null ? string.Empty : " + Fabric")}）");
-        if (fileCount > 0)
+        return instance;
+    }
+
+    private static async Task DownloadCurseForgeFilesAsync(JsonArray files, string instanceDir, string apiKey, Action<string> log)
+    {
+        var ids = new List<long>();
+        foreach (JsonNode? node in files)
         {
-            log($"⚠ 这个包有 {fileCount} 个文件需要在 CurseForge 下载；下载接口需要 API key，本次只导入了 overrides 和配置。");
+            long? fileId = node?["fileID"]?.GetValue<long>();
+            if (fileId is not null)
+            {
+                ids.Add(fileId.Value);
+            }
         }
 
-        return instance;
+        if (ids.Count == 0)
+        {
+            return;
+        }
+
+        Dictionary<long, CurseForgeFile> map = await CurseForgeClient.GetFilesAsync(ids, apiKey, log).ConfigureAwait(false);
+
+        var items = new List<DownloadItem>();
+        int noUrl = 0;
+        int missing = 0;
+        foreach (long id in ids)
+        {
+            if (!map.TryGetValue(id, out CurseForgeFile? file))
+            {
+                missing++;
+                continue;
+            }
+
+            if (file.DownloadUrl is null)
+            {
+                noUrl++;
+                continue;
+            }
+
+            items.Add(new DownloadItem(file.DownloadUrl, "mods/" + file.FileName, file.Sha1 ?? string.Empty, file.Size));
+        }
+
+        if (noUrl > 0)
+        {
+            log($"⚠ {noUrl} 个文件作者禁止第三方下载（downloadUrl 为空），需要手动下载");
+        }
+
+        if (missing > 0)
+        {
+            log($"⚠ {missing} 个文件 CurseForge 没有返回信息");
+        }
+
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        log($"开始下载 {items.Count} 个文件…");
+        int failed = await Downloader.DownloadAllAsync(items, instanceDir).ConfigureAwait(false);
+        log($"CurseForge 文件下载完成，失败 {failed} 个");
     }
 
     // ---------- 通用整合包 ----------

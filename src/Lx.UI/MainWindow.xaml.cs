@@ -218,10 +218,27 @@ public partial class MainWindow : Window
 
         try
         {
+            PackKind kind = PackImporter.DetectKind(dialog.FileName);
+            string? cfKey = CurseForgeClient.ResolveKey(_installRoot);
+
+            if (kind == PackKind.CurseForge && cfKey is null)
+            {
+                var keyDialog = new ApiKeyWindow { Owner = this };
+                if (keyDialog.ShowDialog() != true || keyDialog.Key is null)
+                {
+                    return;
+                }
+
+                cfKey = keyDialog.Key;
+                CurseForgeClient.SaveKey(_installRoot, cfKey);
+                Log("CurseForge key 已保存");
+            }
+
             var imported = await PackImporter.ImportAsync(
                 dialog.FileName,
                 _installRoot,
-                message => Dispatcher.Invoke(() => Log(message)));
+                message => Dispatcher.Invoke(() => Log(message)),
+                cfKey);
 
             RefreshInstances(imported.Name);
             Log($"整合包导入完成：{imported.Name}");

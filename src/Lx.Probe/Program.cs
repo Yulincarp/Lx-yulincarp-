@@ -23,6 +23,7 @@ string? gameDirArg = null;
 string? modsAction = null;
 string? modsTarget = null;
 string? importArg = null;
+string? cfKeyArg = null;
 string? accountArg = null;
 bool listOnly = false;
 bool listAccounts = false;
@@ -59,6 +60,10 @@ for (int i = 0; i < args.Length; i++)
     else if (arg == "--import" && i + 1 < args.Length)
     {
         importArg = args[++i];
+    }
+    else if (arg == "--cf-key" && i + 1 < args.Length)
+    {
+        cfKeyArg = args[++i];
     }
     else if (arg == "--game-dir" && i + 1 < args.Length)
     {
@@ -131,7 +136,14 @@ if (importArg is not null)
 {
     try
     {
-        Instance imported = await PackImporter.ImportAsync(importArg, installRoot, Console.WriteLine);
+        if (cfKeyArg is not null)
+        {
+            CurseForgeClient.SaveKey(installRoot, cfKeyArg);
+            Console.WriteLine("CurseForge key 已保存到 minecraft\\curseforge-key.txt");
+        }
+
+        string? cfKey = CurseForgeClient.ResolveKey(installRoot, cfKeyArg);
+        Instance imported = await PackImporter.ImportAsync(importArg, installRoot, Console.WriteLine, cfKey);
         Console.WriteLine($"导入完成：{imported.Name}（{imported.VersionId}）");
         return 0;
     }

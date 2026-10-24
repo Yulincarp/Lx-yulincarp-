@@ -164,3 +164,22 @@ public class PackImporterTests
         }
     }
 }
+public class CurseForgeKeyTests
+{
+    [Fact]
+    public void ResolveKey_PrefersOverrideThenFile()
+    {
+        string root = Path.Combine(AppContext.BaseDirectory, "cfkey-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            CurseForgeClient.SaveKey(root, "file-key");
+            Assert.Equal("file-key", File.ReadAllText(CurseForgeClient.KeyFile(root)).Trim());
+            Assert.Equal("override", CurseForgeClient.ResolveKey(root, " override "));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+}
