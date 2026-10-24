@@ -49,6 +49,11 @@ public static class YggdrasilAuth
             throw new InvalidOperationException("登录成功但响应里没有 accessToken");
         }
 
+        var roles = (result.AvailableProfiles ?? new List<Profile>())
+            .Where(item => item.Id is not null && item.Name is not null)
+            .Select(item => new AccountRole(item.Id!, item.Name!))
+            .ToList();
+
         Profile? profile = result.SelectedProfile ?? result.AvailableProfiles?.FirstOrDefault();
         if (profile?.Id is null || profile.Name is null)
         {
@@ -60,12 +65,31 @@ public static class YggdrasilAuth
             Console.WriteLine($"[提示] 服务端没返回默认角色，先用 availableProfiles 里的第一个：{profile.Name}");
         }
 
+        string accessToken = result.AccessToken;
+
+        if (preferredRole is not null && !string.Equals(profile.Name, preferredRole, StringComparison.OrdinalIgnoreCase))
+        {
+            AccountRole? target = roles.FirstOrDefault(role =>
+                string.Equals(role.Name, preferredRole, StringComparison.OrdinalIgnoreCase));
+
+            if (target is null)
+            {
+                string names = roles.Count == 0 ? "（服务端没返回角色列表）" : string.Join("、", roles.Select(role => role.Name));
+                throw new InvalidOperationException($"账号里没有角色 {preferredRole}（可选：{names}）");
+            }
+
+            accessToken = await RefreshTokenAsync(apiRoot, accessToken, target).ConfigureAwait(false);
+            profile = new Profile { Id = target.Id, Name = target.Name };
+            Console.WriteLine($"已切换到角色：{target.Name}");
+        }
+
         return new Account(
             "yggdrasil",
             profile.Name,
             profile.Id.Replace("-", string.Empty, StringComparison.Ordinal),
-            result.AccessToken,
-            apiRoot);
+            accessToken,
+            apiRoot,
+            roles);
     }
 
     // 用 refresh 把 token 重新绑定到指定角色（Yggdrasil 标准做法）。
