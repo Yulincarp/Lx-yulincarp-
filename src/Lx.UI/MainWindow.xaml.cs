@@ -50,6 +50,15 @@ public partial class MainWindow : Window
         {
             VersionManifest manifest = await ManifestService.EnsureManifestAsync(_installRoot);
             List<ManifestVersion> versions = manifest.Versions ?? new List<ManifestVersion>();
+
+            // 把本地装好的（Forge/NeoForge/Fabric）也加进下拉框
+            foreach (ManifestVersion local in ManifestService.LocalVersions(_installRoot))
+            {
+                if (versions.All(v => !string.Equals(v.Id, local.Id, StringComparison.OrdinalIgnoreCase)))
+                {
+                    versions.Insert(0, local);
+                }
+            }
             VersionBox.ItemsSource = versions;
             VersionBox.DisplayMemberPath = "Id";
             VersionBox.SelectedItem = versions.FirstOrDefault(v => v.Id == "1.20.4") ?? versions.FirstOrDefault();

@@ -71,6 +71,26 @@ public static class Downloader
         return failed;
     }
 
+    // 很多 maven 仓库旁边放一个 .sha1 文件，Forge 的库就是靠这个补校验值。
+    private static async Task<string> TryFetchSha1Async(string url)
+    {
+        try
+        {
+            string text = (await Http.GetStringAsync(url + ".sha1").ConfigureAwait(false)).Trim();
+            if (text.Length >= 40)
+            {
+                string candidate = text[..40];
+                return candidate.All(Uri.IsHexDigit) ? candidate : string.Empty;
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            // 没有旁文件就放弃
+        }
+
+        return string.Empty;
+    }
+
     // 最多试 3 次；4xx 除了 429 都不重试（重试也不会变好）。
     private static async Task<bool> TryDownloadAsync(DownloadItem item, string dest)
     {
@@ -102,7 +122,17 @@ public static class Downloader
                     await body.CopyToAsync(output).ConfigureAwait(false);
                 }
 
-                if (!string.Equals(Hasher.Sha1Of(temp), item.Sha1, StringComparison.OrdinalIgnoreCase))
+                string expectedSha1 = item.Sha1;
+                if (expectedSha1.Length == 0)
+                {
+                    expectedSha1 = await TryFetchSha1Async(item.Url).ConfigureAwait(false);
+                }
+
+                if (expectedSha1.Length == 0)
+                {
+                    Console.WriteLine($"[警告] 没有 sha1，跳过校验：{item.Url}");
+                }
+                else if (!string.Equals(Hasher.Sha1Of(temp), expectedSha1, StringComparison.OrdinalIgnoreCase))
                 {
                     Console.WriteLine($"[sha1 不符] {item.Url}");
                     return false;

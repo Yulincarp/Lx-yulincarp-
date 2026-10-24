@@ -52,7 +52,23 @@ public static class LaunchPipeline
             log($"Fabric 已合并到 {versionId}");
         }
 
-        VersionJson version = JsonSerializer.Deserialize<VersionJson>(File.ReadAllText(versionJsonPath), JsonOptions)!;
+        string versionText = File.ReadAllText(versionJsonPath);
+        VersionJson version = JsonSerializer.Deserialize<VersionJson>(versionText, JsonOptions)!;
+
+        // Forge / NeoForge 的 version.json 只含自己的库，靠 inheritsFrom 指向原版，这里合并父版本。
+        // Fabric 的合并已经在 FabricInstaller 里做过，跳过以免重复。
+        if (!string.Equals(options.Loader, "fabric", StringComparison.OrdinalIgnoreCase) &&
+            version.InheritsFrom is { Length: > 0 } parentId)
+        {
+            string parentPath = Path.Combine(installRoot, "versions", parentId, parentId + ".json");
+            if (File.Exists(parentPath))
+            {
+                string merged = VersionMerger.Merge(File.ReadAllText(parentPath), versionText);
+                version = JsonSerializer.Deserialize<VersionJson>(merged, JsonOptions)!;
+                log($"已合并父版本 {parentId} 的库与参数");
+            }
+        }
+
         var features = new Dictionary<string, bool>();
 
         List<DownloadItem> manifestItems = DownloadManifest.Build(version, versionId, features);
@@ -118,6 +134,8 @@ public static class LaunchPipeline
             ["launcher_name"] = "lx",
             ["launcher_version"] = "0.1",
             ["classpath"] = string.Join(";", classpath),
+            ["library_directory"] = librariesDir,
+            ["classpath_separator"] = ";",
             ["clientid"] = "",
             ["auth_xuid"] = "",
             ["resolution_width"] = "854",

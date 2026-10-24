@@ -167,6 +167,31 @@ public class PackImporterTests
 public class CurseForgeKeyTests
 {
     [Fact]
+    public void SaveKey_EncryptsWithDpapiOnWindows()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        string root = Path.Combine(AppContext.BaseDirectory, "cfkey-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            CurseForgeClient.SaveKey(root, "secret-123");
+
+            string raw = File.ReadAllText(CurseForgeClient.KeyFile(root));
+            Assert.StartsWith("dpapi:", raw);
+            Assert.DoesNotContain("secret-123", raw);
+            Assert.Equal("secret-123", CurseForgeClient.ResolveKey(root));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ResolveKey_PrefersOverrideThenFile()
     {
         string root = Path.Combine(AppContext.BaseDirectory, "cfkey-" + Guid.NewGuid().ToString("N"));
@@ -174,7 +199,7 @@ public class CurseForgeKeyTests
         try
         {
             CurseForgeClient.SaveKey(root, "file-key");
-            Assert.Equal("file-key", File.ReadAllText(CurseForgeClient.KeyFile(root)).Trim());
+            Assert.Equal("file-key", CurseForgeClient.ResolveKey(root));
             Assert.Equal("override", CurseForgeClient.ResolveKey(root, " override "));
         }
         finally

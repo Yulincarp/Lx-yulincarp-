@@ -2,6 +2,7 @@ using System.Text.Json;
 using Lx.Probe.Auth;
 using Lx.Probe.Instances;
 using Lx.Probe.Launch;
+using Lx.Probe.Loaders;
 using Lx.Probe.Model;
 using Lx.Probe.Modpacks;
 using Lx.Probe.Mods;
@@ -24,6 +25,7 @@ string? modsAction = null;
 string? modsTarget = null;
 string? importArg = null;
 string? cfKeyArg = null;
+string? installLoaderArg = null;
 string? accountArg = null;
 bool listOnly = false;
 bool listAccounts = false;
@@ -81,6 +83,10 @@ for (int i = 0; i < args.Length; i++)
     {
         loaderArg = args[++i];
     }
+    else if (arg == "--install-loader" && i + 1 < args.Length)
+    {
+        installLoaderArg = args[++i];
+    }
     else if (arg == "--loader-version" && i + 1 < args.Length)
     {
         loaderVersionArg = args[++i];
@@ -117,6 +123,28 @@ for (int i = 0; i < args.Length; i++)
 
 string installRoot = Path.GetFullPath(rootArg ?? "minecraft");
 string versionId = versionArg ?? "1.20.4";
+
+if (installLoaderArg is not null)
+{
+    try
+    {
+        string installedId = await ForgeInstaller.InstallAsync(
+            versionId,
+            installRoot,
+            installLoaderArg,
+            loaderVersionArg,
+            Console.WriteLine);
+
+        Console.WriteLine($"安装完成：{installedId}");
+        Console.WriteLine($"启动：dotnet run --project src/Lx.Probe -- --version {installedId}");
+        return 0;
+    }
+    catch (Exception ex) when (ex is InvalidOperationException or IOException)
+    {
+        Console.WriteLine($"[错误] {ex.Message}");
+        return 1;
+    }
+}
 
 if (modsAction is not null)
 {

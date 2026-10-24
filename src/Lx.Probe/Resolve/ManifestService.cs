@@ -25,6 +25,28 @@ public static class ManifestService
                ?? throw new InvalidOperationException("version_manifest_v2.json 解析失败");
     }
 
+    // 本地安装的版本（Forge / NeoForge / Fabric 生成在 versions/ 下，Mojang manifest 里没有）。
+    public static List<ManifestVersion> LocalVersions(string installRoot)
+    {
+        string dir = Path.Combine(installRoot, "versions");
+        if (!Directory.Exists(dir))
+        {
+            return new List<ManifestVersion>();
+        }
+
+        var result = new List<ManifestVersion>();
+        foreach (string versionDir in Directory.EnumerateDirectories(dir))
+        {
+            string id = Path.GetFileName(versionDir);
+            if (File.Exists(Path.Combine(versionDir, id + ".json")))
+            {
+                result.Add(new ManifestVersion { Id = id, Type = "local" });
+            }
+        }
+
+        return result;
+    }
+
     // 找不到就抛，不带默认值——拼错版本号时应该立刻报错，而不是悄悄用别的版本。
     public static ManifestVersion Find(VersionManifest manifest, string versionId)
     {
@@ -35,9 +57,22 @@ public static class ManifestService
 
     public static async Task<string> EnsureVersionJsonAsync(VersionManifest manifest, string versionId, string installRoot)
     {
-        ManifestVersion entry = Find(manifest, versionId);
         string dir = Path.Combine(installRoot, "versions", versionId);
         string path = Path.Combine(dir, versionId + ".json");
+
+        ManifestVersion? entry = (manifest.Versions ?? new List<ManifestVersion>())
+            .FirstOrDefault(version => string.Equals(version.Id, versionId, StringComparison.OrdinalIgnoreCase));
+
+        // Forge / NeoForge 装完的版本不在 Mojang manifest 里，直接读本地。
+        if (entry is null)
+        {
+            if (File.Exists(path))
+            {
+                return path;
+            }
+
+            throw new InvalidOperationException($"版本 {versionId} 不在 manifest 里，本地也没有 {path}");
+        }
 
         if (File.Exists(path) &&
             entry.Sha1 is not null &&

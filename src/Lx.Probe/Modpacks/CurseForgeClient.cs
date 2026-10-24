@@ -1,5 +1,7 @@
 using System.Net;
 using System.Text;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Nodes;
 
 namespace Lx.Probe.Modpacks;
@@ -32,20 +34,59 @@ public static class CurseForgeClient
         string path = KeyFile(installRoot);
         if (File.Exists(path))
         {
-            string key = File.ReadAllText(path).Trim();
-            if (key.Length > 0)
-            {
-                return key;
-            }
+            return ReadStoredKey(path);
         }
 
         return null;
     }
 
+    // Windows 上用 DPAPI 加密（当前用户才能解开）；其他平台退回明文。
     public static void SaveKey(string installRoot, string key)
     {
         Directory.CreateDirectory(installRoot);
-        File.WriteAllText(KeyFile(installRoot), key.Trim());
+        string trimmed = key.Trim();
+
+        if (OperatingSystem.IsWindows())
+        {
+            byte[] protectedBytes = ProtectedData.Protect(
+                Encoding.UTF8.GetBytes(trimmed),
+                optionalEntropy: null,
+                DataProtectionScope.CurrentUser);
+            File.WriteAllText(KeyFile(installRoot), "dpapi:" + Convert.ToBase64String(protectedBytes));
+            return;
+        }
+
+        File.WriteAllText(KeyFile(installRoot), trimmed);
+    }
+
+    private static string? ReadStoredKey(string path)
+    {
+        string raw = File.ReadAllText(path).Trim();
+        if (raw.Length == 0)
+        {
+            return null;
+        }
+
+        if (!raw.StartsWith("dpapi:", StringComparison.OrdinalIgnoreCase))
+        {
+            return raw;
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return null; // 非 Windows 解不开 DPAPI
+        }
+
+        try
+        {
+            byte[] bytes = Convert.FromBase64String(raw["dpapi:".Length..]);
+            byte[] plain = ProtectedData.Unprotect(bytes, optionalEntropy: null, DataProtectionScope.CurrentUser);
+            return Encoding.UTF8.GetString(plain);
+        }
+        catch (Exception ex) when (ex is FormatException or CryptographicException)
+        {
+            return null;
+        }
     }
 
     // 批量查文件信息（接口一次最多 100 个）。
