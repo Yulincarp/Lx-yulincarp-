@@ -16,7 +16,7 @@ public static class YggdrasilAuth
         PropertyNameCaseInsensitive = true,
     };
 
-    public static async Task<Account> LoginAsync(string apiRoot, string username, string password, bool debug = false)
+    public static async Task<Account> LoginAsync(string apiRoot, string username, string password, bool debug = false, string? preferredRole = null)
     {
         apiRoot = apiRoot.TrimEnd('/');
         string url = apiRoot + "/authserver/authenticate";
@@ -66,6 +66,74 @@ public static class YggdrasilAuth
             profile.Id.Replace("-", string.Empty, StringComparison.Ordinal),
             result.AccessToken,
             apiRoot);
+    }
+
+    // 用 refresh 把 token 重新绑定到指定角色（Yggdrasil 标准做法）。
+    public static async Task<Account> SwitchRoleAsync(Account account, string roleName)
+    {
+        if (account.ApiRoot is null || account.AvailableRoles is null || account.AvailableRoles.Count == 0)
+        {
+            throw new InvalidOperationException("这个账号没有角色列表，先重新登录一次（--relogin）");
+        }
+
+        AccountRole? role = account.AvailableRoles.FirstOrDefault(item =>
+            string.Equals(item.Name, roleName, StringComparison.OrdinalIgnoreCase));
+
+        if (role is null)
+        {
+            string names = string.Join("、", account.AvailableRoles.Select(item => item.Name));
+            throw new InvalidOperationException($"没有角色 {roleName}（可选：{names}）");
+        }
+
+        if (string.Equals(account.Name, role.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            return account;
+        }
+
+        string token = await RefreshTokenAsync(account.ApiRoot, account.AccessToken, role).ConfigureAwait(false);
+        return account with
+        {
+            Name = role.Name,
+            Uuid = role.Id.Replace("-", string.Empty, StringComparison.Ordinal),
+            AccessToken = token,
+        };
+    }
+
+    private static async Task<string> RefreshTokenAsync(string apiRoot, string accessToken, AccountRole role)
+    {
+        string api = apiRoot.TrimEnd('/');
+        string url = api + "/authserver/refresh";
+
+        object payload = new
+        {
+            accessToken,
+            selectedProfile = new { id = role.Id, name = role.Name },
+            requestUser = false,
+        };
+
+        (HttpStatusCode status, string body) = await PostJsonAsync(url, payload).ConfigureAwait(false);
+
+        if (!status.Equals(HttpStatusCode.OK))
+        {
+            // 有些实现只认 uuid 字符串
+            payload = new { accessToken, selectedProfile = role.Id };
+            (status, body) = await PostJsonAsync(url, payload).ConfigureAwait(false);
+        }
+
+        if (!status.Equals(HttpStatusCode.OK))
+        {
+            throw new InvalidOperationException($"切换角色失败（{(int)status}）：{DescribeError(body, status)}");
+        }
+
+        AuthenticateResponse? result = JsonSerializer.Deserialize<AuthenticateResponse>(body, JsonOptions);
+        return result?.AccessToken
+               ?? throw new InvalidOperationException("切换角色成功但没拿到新 token");
+    }
+
+    private static async Task<(HttpStatusCode Status, string Body)> PostJsonAsync(string url, object payload)
+    {
+        using HttpResponseMessage response = await Http.PostAsJsonAsync(url, payload).ConfigureAwait(false);
+        return (response.StatusCode, await response.Content.ReadAsStringAsync().ConfigureAwait(false));
     }
 
     private static string DescribeError(string body, HttpStatusCode status)

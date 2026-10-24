@@ -27,6 +27,7 @@ string? importArg = null;
 string? cfKeyArg = null;
 string? installLoaderArg = null;
 string? artifactSourceArg = null;
+string? roleArg = null;
 bool updatePackFlag = false;
 bool installOptiFabricFlag = false;
 string? accountArg = null;
@@ -93,6 +94,10 @@ for (int i = 0; i < args.Length; i++)
     else if (arg == "--artifact-source" && i + 1 < args.Length)
     {
         artifactSourceArg = args[++i];
+    }
+    else if (arg == "--role" && i + 1 < args.Length)
+    {
+        roleArg = args[++i];
     }
     else if (arg == "--update-pack")
     {
@@ -314,8 +319,22 @@ else
                     string.Equals(a.ApiRoot, apiArg, StringComparison.OrdinalIgnoreCase));
             if (cached is not null)
             {
-                account = cached;
-                break;
+                if (roleArg is null)
+                {
+                    account = cached;
+                    break;
+                }
+
+                try
+                {
+                    account = await YggdrasilAuth.SwitchRoleAsync(cached, roleArg);
+                    break;
+                }
+                catch (InvalidOperationException ex)
+                {
+                    Console.WriteLine($"[错误] {ex.Message}");
+                    return 1;
+                }
             }
 
             if (emailArg is null)
@@ -327,7 +346,7 @@ else
             string password = ConsolePrompt.ReadPassword("密码（不会保存）：");
             try
             {
-                account = await YggdrasilAuth.LoginAsync(apiArg, emailArg, password, debug);
+                account = await YggdrasilAuth.LoginAsync(apiArg, emailArg, password, debug, roleArg);
             }
             catch (InvalidOperationException ex)
             {

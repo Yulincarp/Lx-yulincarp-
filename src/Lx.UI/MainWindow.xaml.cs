@@ -112,6 +112,46 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void SwitchRole_Click(object sender, RoutedEventArgs e)
+    {
+        if (AccountBox.SelectedItem is not Account account)
+        {
+            Log("先选一个账号");
+            return;
+        }
+
+        if (account.Type != "yggdrasil")
+        {
+            Log("只有外置（Yggdrasil）账号支持切换角色");
+            return;
+        }
+
+        if (account.AvailableRoles is null || account.AvailableRoles.Count == 0)
+        {
+            Log("这个账号没有角色列表，先用「登录」重新登录一次");
+            return;
+        }
+
+        var dialog = new RoleWindow(account) { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.SelectedRole is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Account switched = await YggdrasilAuth.SwitchRoleAsync(account, dialog.SelectedRole);
+            AccountStore.Save(_installRoot, switched);
+            RefreshAccounts();
+            AccountBox.SelectedItem = AccountStore.FindByName(_installRoot, switched.Name);
+            Log($"已切换角色：{switched.Name}（{switched.Uuid}）");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Log($"[错误] {ex.Message}");
+        }
+    }
+
     private void MicrosoftLogin_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new MicrosoftLoginWindow(_installRoot) { Owner = this };

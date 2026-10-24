@@ -22,6 +22,7 @@
             <Button Content="添加" Margin="8,0,0,0" Padding="10,3" Click="AddAccount_Click"/>
             <Button Content="登录" Margin="8,0,0,0" Padding="10,3" Click="Login_Click"/>
             <Button Content="正版登录" Margin="8,0,0,0" Padding="10,3" Click="MicrosoftLogin_Click"/>
+            <Button Content="切换角色" Margin="8,0,0,0" Padding="10,3" Click="SwitchRole_Click"/>
         </StackPanel>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,12,0,0">
