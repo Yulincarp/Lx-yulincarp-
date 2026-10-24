@@ -40,7 +40,8 @@ string gameRoot = Path.GetFullPath(args.Length > 1 ? args[1] : "minecraft");
 string librariesDir = Path.Combine(installRoot, "libraries");
 string assetsDir = Path.Combine(installRoot, "assets");
 string clientJar = Path.Combine(installRoot, "versions", "1.20.4", "1.20.4.jar");
-
+int failed = Downloader.DownloadAll(manifest, installRoot);
+Console.WriteLine($"下载结果：失败 {failed} 个");
 List<string> classpath = ClasspathBuilder.Build(
     libraries ?? new List<Library>(),
     librariesDir,

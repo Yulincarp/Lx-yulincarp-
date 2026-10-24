@@ -40,7 +40,7 @@ public static class DownloadManifest
                 continue;
             }
 
-            items.Add(new DownloadItem(url, path, sha1, artifact.Size));
+            items.Add(new DownloadItem(url, "libraries/" + path, sha1, artifact.Size));
         }
 
         LibraryArtifact? client = version.Downloads?.Client;
