@@ -85,6 +85,28 @@ public partial class MainWindow : Window
         Log($"已添加离线账号：{name}（{account.Uuid}）");
     }
 
+    private void Login_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new LoginWindow(_installRoot) { Owner = this };
+        if (dialog.ShowDialog() == true && dialog.Result is not null)
+        {
+            RefreshAccounts();
+            AccountBox.SelectedItem = AccountStore.FindByName(_installRoot, dialog.Result.Name);
+            Log($"已登录：{dialog.Result.Type} {dialog.Result.Name}");
+        }
+    }
+
+    private void MicrosoftLogin_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new MicrosoftLoginWindow(_installRoot) { Owner = this };
+        if (dialog.ShowDialog() == true && dialog.Result is not null)
+        {
+            RefreshAccounts();
+            AccountBox.SelectedItem = AccountStore.FindByName(_installRoot, dialog.Result.Name);
+            Log($"已登录正版：{dialog.Result.Name}");
+        }
+    }
+
     private void Version_Changed(object sender, RoutedEventArgs e) => RefreshMods();
 
     private void RefreshMods_Click(object sender, RoutedEventArgs e) => RefreshMods();
@@ -203,6 +225,8 @@ public partial class MainWindow : Window
 
         LaunchButton.IsEnabled = false;
         StatusText.Text = "准备中…";
+        Progress.Value = 0;
+        Progress.Maximum = 1;
         try
         {
             var options = new LaunchOptions(
@@ -213,12 +237,21 @@ public partial class MainWindow : Window
                 null,
                 account);
 
+            var progress = new Progress<LaunchProgress>(p =>
+            {
+                Progress.Maximum = Math.Max(p.Total, 1);
+                Progress.Value = p.Done;
+                StatusText.Text = $"{p.Stage} {p.Done}/{p.Total}";
+            });
+
             LaunchResult result = await LaunchPipeline.RunAsync(
                 options,
-                message => Dispatcher.Invoke(() => Log(message)));
+                message => Dispatcher.Invoke(() => Log(message)),
+                progress);
 
             Log($"命令行：{result.CommandLine.Length} 字符");
             StartGame(result.CommandLine);
+            Progress.Value = Progress.Maximum;
             StatusText.Text = "已启动";
             RefreshMods();
         }

@@ -15,6 +15,8 @@ public sealed record LaunchOptions(
     Account Account);
 
 // 一次启动的产物：命令行 + 关键统计，界面和命令行都用它。
+public sealed record LaunchProgress(string Stage, int Done, int Total);
+
 public sealed record LaunchResult(
     string VersionId,
     string GameDir,
@@ -31,7 +33,7 @@ public static class LaunchPipeline
         PropertyNameCaseInsensitive = true,
     };
 
-    public static async Task<LaunchResult> RunAsync(LaunchOptions options, Action<string> log)
+    public static async Task<LaunchResult> RunAsync(LaunchOptions options, Action<string> log, IProgress<LaunchProgress>? progress = null)
     {
         string installRoot = options.InstallRoot;
         VersionManifest manifest = await ManifestService.EnsureManifestAsync(installRoot).ConfigureAwait(false);
@@ -55,14 +57,14 @@ public static class LaunchPipeline
 
         List<DownloadItem> manifestItems = DownloadManifest.Build(version, versionId, features);
         log($"清单：{manifestItems.Count} 个文件，共 {manifestItems.Sum(i => i.Size) / 1024.0 / 1024.0:F1} MB");
-        int failed = await Downloader.DownloadAllAsync(manifestItems, installRoot).ConfigureAwait(false);
+        int failed = await Downloader.DownloadAllAsync(manifestItems, installRoot, 8, (done, total) => progress?.Report(new LaunchProgress("游戏文件", done, total))).ConfigureAwait(false);
         log($"游戏文件下载完成，失败 {failed} 个");
 
         string assetsDir = Path.Combine(installRoot, "assets");
         string indexFile = Path.Combine(assetsDir, "indexes", (version.Assets ?? "12") + ".json");
         List<DownloadItem> assets = DownloadManifest.BuildAssets(indexFile);
         log($"assets：{assets.Count} 个对象");
-        int failedAssets = await Downloader.DownloadAllAsync(assets, installRoot).ConfigureAwait(false);
+        int failedAssets = await Downloader.DownloadAllAsync(assets, installRoot, 8, (done, total) => progress?.Report(new LaunchProgress("assets", done, total))).ConfigureAwait(false);
         log($"assets 下载完成，失败 {failedAssets} 个");
 
         var allFiles = new List<DownloadItem>(manifestItems);

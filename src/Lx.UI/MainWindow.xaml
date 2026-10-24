@@ -20,6 +20,8 @@
             <TextBlock Text="离线名" VerticalAlignment="Center" Margin="24,0,6,0"/>
             <TextBox x:Name="NameBox" Width="110" VerticalAlignment="Center"/>
             <Button x:Name="AddAccountButton" Content="添加" Margin="8,0,0,0" Padding="10,3" Click="AddAccount_Click"/>
+            <Button Content="登录" Margin="8,0,0,0" Padding="10,3" Click="Login_Click"/>
+            <Button Content="正版登录" Margin="8,0,0,0" Padding="10,3" Click="MicrosoftLogin_Click"/>
         </StackPanel>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,12,0,0">

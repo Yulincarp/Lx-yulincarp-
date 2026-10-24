@@ -20,14 +20,14 @@ public static class MicrosoftAuth
 
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
-    public static async Task<Account> LoginAsync(string clientId)
+    public static async Task<Account> LoginAsync(string clientId, Action<string>? log = null)
     {
+        Action<string> say = log ?? Console.WriteLine;
         DeviceCodeResponse device = await RequestDeviceCodeAsync(clientId);
 
-        Console.WriteLine();
-        Console.WriteLine($"1) 打开 {device.VerificationUri}");
-        Console.WriteLine($"2) 输入代码：{device.UserCode}");
-        Console.WriteLine("   （授权完成后这里会自动继续，别关窗口）");
+        say($"1) 打开 {device.VerificationUri}");
+        say($"2) 输入代码：{device.UserCode}");
+        say("（授权完成后自动继续）");
 
         string msToken = await PollForTokenAsync(clientId, device);
 

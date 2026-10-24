@@ -10,7 +10,8 @@ public static class Downloader
     public static async Task<int> DownloadAllAsync(
         IReadOnlyList<DownloadItem> items,
         string installRoot,
-        int concurrency = 8)
+        int concurrency = 8,
+        Action<int, int>? onProgress = null)
     {
         int ok = 0;
         int skipped = 0;
@@ -54,6 +55,11 @@ public static class Downloader
                 if (n % 50 == 0 || n == total)
                 {
                     Console.WriteLine($"[{n}/{total}]");
+                }
+
+                if (onProgress is not null && (n % 10 == 0 || n == total))
+                {
+                    onProgress(n, total);
                 }
             }
         }
