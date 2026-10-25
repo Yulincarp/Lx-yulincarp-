@@ -1,13 +1,24 @@
 using System.Net;
-using System.Text;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
+using Lx.Probe.Mods;
 
 namespace Lx.Probe.Modpacks;
 
-// CurseForge 的一个文件（下载地址 + sha1）。
-public sealed record CurseForgeFile(long FileId, string FileName, string? DownloadUrl, string? Sha1, long Size);
+public sealed record CurseForgeDependency(long ModId, int RelationType);
+
+// CurseForge 的一个文件（下载地址 + sha1 + required 依赖）。
+public sealed record CurseForgeFile(
+    long FileId,
+    string FileName,
+    string? DownloadUrl,
+    string? Sha1,
+    long Size,
+    long ModId = 0,
+    string? DisplayName = null,
+    int ReleaseType = 0,
+    List<CurseForgeDependency>? Dependencies = null);
 
 // CurseForge API：用 key 换下载地址。key 从 --cf-key / 环境变量 / minecraft\curseforge-key.txt 取。
 public static class CurseForgeClient
@@ -156,6 +167,171 @@ public static class CurseForgeClient
             newest["downloadUrl"]?.GetValue<string>(),
             sha1,
             newest["fileLength"]?.GetValue<long>() ?? 0);
+    }
+
+    // 1 Forge / 4 Fabric / 6 NeoForge（CurseForge 的 modLoaderType）。
+    public static int LoaderType(string loader) => loader.ToLowerInvariant() switch
+    {
+        "forge" => 1,
+        "fabric" => 4,
+        "quilt" => 5,
+        "neoforge" => 6,
+        _ => 0,
+    };
+
+    public static async Task<List<ModSearchResult>> SearchAsync(
+        string query,
+        string gameVersion,
+        string loader,
+        string apiKey,
+        int limit = 20,
+        CancellationToken cancellationToken = default)
+    {
+        int loaderType = LoaderType(loader);
+        if (loaderType == 0)
+        {
+            throw new InvalidOperationException($"CurseForge 不支持加载器 {loader}");
+        }
+
+        string url =
+            $"{Base}/mods/search?gameId=432&classId=6&searchFilter={Uri.EscapeDataString(query)}" +
+            $"&gameVersion={Uri.EscapeDataString(gameVersion)}&modLoaderType={loaderType}" +
+            $"&sortField=2&sortOrder=desc&pageSize={Math.Clamp(limit, 1, 50)}";
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Add("x-api-key", apiKey);
+        request.Headers.Add("Accept", "application/json");
+
+        using HttpResponseMessage response = await Http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureOkAsync(response, "搜索 mod").ConfigureAwait(false);
+
+        JsonNode? root = JsonNode.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+        var results = new List<ModSearchResult>();
+        foreach (JsonNode? node in root?["data"] as JsonArray ?? new JsonArray())
+        {
+            long? id = node?["id"]?.GetValue<long>();
+            string? name = node?["name"]?.GetValue<string>();
+            if (id is null || name is null)
+            {
+                continue;
+            }
+
+            string slug = node?["slug"]?.GetValue<string>() ?? id.Value.ToString();
+            string author = (node?["authors"] as JsonArray)?
+                .FirstOrDefault()?["name"]?.GetValue<string>() ?? string.Empty;
+
+            results.Add(new ModSearchResult(
+                id.Value.ToString(),
+                slug,
+                name,
+                node?["summary"]?.GetValue<string>() ?? string.Empty,
+                author,
+                node?["downloadCount"]?.GetValue<long>() ?? 0,
+                "curseforge"));
+        }
+
+        return results;
+    }
+
+    public static async Task<List<CurseForgeFile>> GetModFilesAsync(
+        long modId,
+        string gameVersion,
+        string loader,
+        string apiKey,
+        CancellationToken cancellationToken = default)
+    {
+        int loaderType = LoaderType(loader);
+        string url =
+            $"{Base}/mods/{modId}/files?gameVersion={Uri.EscapeDataString(gameVersion)}" +
+            $"&modLoaderType={loaderType}&pageSize=50";
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Add("x-api-key", apiKey);
+        request.Headers.Add("Accept", "application/json");
+
+        using HttpResponseMessage response = await Http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureOkAsync(response, $"查询 mod {modId} 文件").ConfigureAwait(false);
+
+        JsonNode? root = JsonNode.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+        var files = new List<CurseForgeFile>();
+        foreach (JsonNode? node in root?["data"] as JsonArray ?? new JsonArray())
+        {
+            CurseForgeFile? file = ParseFile(node);
+            if (file is not null)
+            {
+                files.Add(file);
+            }
+        }
+
+        return files;
+    }
+
+    public static async Task<string> GetModNameAsync(
+        long modId,
+        string apiKey,
+        CancellationToken cancellationToken = default)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{Base}/mods/{modId}");
+        request.Headers.Add("x-api-key", apiKey);
+        request.Headers.Add("Accept", "application/json");
+
+        using HttpResponseMessage response = await Http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            return modId.ToString();
+        }
+
+        JsonNode? root = JsonNode.Parse(await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
+        return root?["data"]?["name"]?.GetValue<string>() ?? modId.ToString();
+    }
+
+    private static CurseForgeFile? ParseFile(JsonNode? node)
+    {
+        if (node is null)
+        {
+            return null;
+        }
+
+        long? id = node["id"]?.GetValue<long>();
+        string? fileName = node["fileName"]?.GetValue<string>();
+        string? downloadUrl = node["downloadUrl"]?.GetValue<string>();
+        if (id is null || fileName is null || downloadUrl is null)
+        {
+            return null;
+        }
+
+        string? sha1 = null;
+        foreach (JsonNode? hash in node["hashes"] as JsonArray ?? new JsonArray())
+        {
+            if (hash?["algo"]?.GetValue<int>() == 1)
+            {
+                sha1 = hash["value"]?.GetValue<string>();
+                break;
+            }
+        }
+
+        var dependencies = new List<CurseForgeDependency>();
+        foreach (JsonNode? dependency in node["dependencies"] as JsonArray ?? new JsonArray())
+        {
+            long? depModId = dependency?["modId"]?.GetValue<long>();
+            if (depModId is > 0)
+            {
+                dependencies.Add(new CurseForgeDependency(
+                    depModId.Value,
+                    dependency?["relationType"]?.GetValue<int>() ?? 0));
+            }
+        }
+
+        return new CurseForgeFile(
+            id.Value,
+            fileName,
+            downloadUrl,
+            sha1,
+            node["fileLength"]?.GetValue<long>() ?? 0,
+            node["modId"]?.GetValue<long>() ?? 0,
+            node["displayName"]?.GetValue<string>(),
+            node["releaseType"]?.GetValue<int>() ?? 0,
+            dependencies);
     }
 
     private static async Task EnsureOkAsync(HttpResponseMessage response, string what)

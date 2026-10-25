@@ -23,7 +23,8 @@ public sealed record ModSearchResult(
     string Title,
     string Description,
     string Author,
-    long Downloads);
+    long Downloads,
+    string Source = "modrinth");
 
 public sealed record ModDependencyInfo(
     string? VersionId,

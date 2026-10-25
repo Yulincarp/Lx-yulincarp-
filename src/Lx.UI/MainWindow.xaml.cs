@@ -232,6 +232,47 @@ public partial class MainWindow : Window
             $"Java：{settings.JavaPath ?? "自动"}{Environment.NewLine}" +
             $"下载源：{DownloadUrlRewriter.Describe(source)}";
         DataDirText.Text = $"数据目录：{_installRoot}";
+        CurseForgeKeyStatus.Text = CurseForgeClient.ResolveKey(_installRoot) is null
+            ? "未保存 Key"
+            : "已保存 Key（DPAPI 加密）";
+    }
+
+    private void SaveCurseForgeKey_Click(object sender, RoutedEventArgs e)
+    {
+        string key = CurseForgeKeyBox.Password.Trim();
+        if (key.Length == 0)
+        {
+            CurseForgeKeyStatus.Text = "先输入 API Key";
+            CurseForgeKeyStatus.Foreground = Brushes.OrangeRed;
+            return;
+        }
+
+        try
+        {
+            CurseForgeClient.SaveKey(_installRoot, key);
+            CurseForgeKeyBox.Clear();
+            CurseForgeKeyStatus.Text = "已保存 Key（DPAPI 加密）";
+            CurseForgeKeyStatus.Foreground = Brushes.Gray;
+            Log("CurseForge API Key 已保存");
+        }
+        catch (Exception ex)
+        {
+            CurseForgeKeyStatus.Text = "保存失败";
+            CurseForgeKeyStatus.Foreground = Brushes.OrangeRed;
+            LogError("保存 CurseForge API Key 失败", ex);
+        }
+    }
+
+    private void OpenModBackup_Click(object sender, RoutedEventArgs e)
+    {
+        string backupDir = Path.Combine(ModManager.ModsDir(CurrentGameDir()), ".lx-backup");
+        if (!Directory.Exists(backupDir))
+        {
+            Log("还没有 mod 备份（批量更新后才会生成）");
+            return;
+        }
+
+        ShellHelper.OpenFolder(backupDir);
     }
 
     private async void SwitchRole_Click(object sender, RoutedEventArgs e)
@@ -1112,6 +1153,20 @@ public partial class MainWindow : Window
         Log(message);
     }
 
+    private void ModSource_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (ModrinthResults is null)
+        {
+            return;
+        }
+
+        ModrinthResults.ItemsSource = null;
+        ModrinthStatusText.Foreground = Brushes.Gray;
+        ModrinthStatusText.Text = ModSourceBox.SelectedIndex == 1
+            ? "CurseForge 需要先在「设置」页保存 API Key"
+            : string.Empty;
+    }
+
     private async void ModrinthSearch_Click(object sender, RoutedEventArgs e)
     {
         if (!TryGetModContext(out string gameVersion, out string loader))
@@ -1128,19 +1183,37 @@ public partial class MainWindow : Window
             return;
         }
 
+        bool curseForge = ModSourceBox.SelectedIndex == 1;
+        string? apiKey = null;
+        if (curseForge)
+        {
+            apiKey = CurseForgeClient.ResolveKey(_installRoot);
+            if (apiKey is null)
+            {
+                ModrinthStatusText.Text = "CurseForge 需要 API Key：先在「设置」页保存";
+                ModrinthStatusText.Foreground = Brushes.OrangeRed;
+                Log("CurseForge 搜索缺少 API Key");
+                return;
+            }
+        }
+
+        string sourceName = curseForge ? "CurseForge" : "Modrinth";
         ModrinthSearchButton.IsEnabled = false;
-        ModrinthStatusText.Text = "搜索中…";
+        ModrinthStatusText.Text = $"搜索 {sourceName}…";
         try
         {
-            List<ModSearchResult> results = await ModrinthClient.SearchAsync(query, gameVersion, loader, 20);
+            List<ModSearchResult> results = curseForge
+                ? await CurseForgeClient.SearchAsync(query, gameVersion, loader, apiKey!, 20)
+                : await ModrinthClient.SearchAsync(query, gameVersion, loader, 20);
+
             ModrinthResults.ItemsSource = results;
             ModrinthStatusText.Text = results.Count == 0 ? "没有结果" : $"找到 {results.Count} 个";
-            Log($"[mods] Modrinth 搜索「{query}」({gameVersion}/{loader})：{results.Count} 个");
+            Log($"[mods] {sourceName} 搜索「{query}」({gameVersion}/{loader})：{results.Count} 个");
         }
         catch (Exception ex)
         {
             ModrinthStatusText.Text = "搜索失败";
-            LogError("Modrinth 搜索失败", ex);
+            LogError($"{sourceName} 搜索失败", ex);
         }
         finally
         {
@@ -1184,6 +1257,19 @@ public partial class MainWindow : Window
             return;
         }
 
+        string? apiKey = null;
+        if (string.Equals(project.Source, "curseforge", StringComparison.OrdinalIgnoreCase))
+        {
+            apiKey = CurseForgeClient.ResolveKey(_installRoot);
+            if (apiKey is null)
+            {
+                ModrinthStatusText.Text = "CurseForge 需要 API Key：先在「设置」页保存";
+                ModrinthStatusText.Foreground = Brushes.OrangeRed;
+                Log("CurseForge 安装缺少 API Key");
+                return;
+            }
+        }
+
         string modsDir = ModManager.ModsDir(CurrentGameDir());
         _modrinthBusy = true;
         ModrinthSearchButton.IsEnabled = false;
@@ -1207,15 +1293,32 @@ public partial class MainWindow : Window
 
             Action<DownloadFailure> onFailure = failure => _downloadFailures.Enqueue(failure);
 
-            int failed = await ModInstaller.InstallAsync(
-                project.Id,
-                gameVersion,
-                loader,
-                _installRoot,
-                modsDir,
-                message => Dispatcher.Invoke(() => Log(message)),
-                progress,
-                onFailure);
+            int failed;
+            if (string.Equals(project.Source, "curseforge", StringComparison.OrdinalIgnoreCase))
+            {
+                failed = await CurseForgeInstaller.InstallAsync(
+                    project.Id,
+                    gameVersion,
+                    loader,
+                    _installRoot,
+                    modsDir,
+                    apiKey!,
+                    message => Dispatcher.Invoke(() => Log(message)),
+                    progress,
+                    onFailure);
+            }
+            else
+            {
+                failed = await ModInstaller.InstallAsync(
+                    project.Id,
+                    gameVersion,
+                    loader,
+                    _installRoot,
+                    modsDir,
+                    message => Dispatcher.Invoke(() => Log(message)),
+                    progress,
+                    onFailure);
+            }
 
             if (failed > 0)
             {

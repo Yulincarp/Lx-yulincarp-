@@ -179,6 +179,12 @@
                     <GroupBox Grid.Row="1" Header="Modrinth 在线安装" Margin="0,16,0,0">
                         <StackPanel>
                             <WrapPanel>
+                                <ComboBox x:Name="ModSourceBox" Width="120" Height="28" Margin="0,0,8,6"
+                                          SelectedIndex="0" SelectionChanged="ModSource_Changed"
+                                          ToolTip="选择搜索源">
+                                    <ComboBoxItem Content="Modrinth"/>
+                                    <ComboBoxItem Content="CurseForge"/>
+                                </ComboBox>
                                 <TextBox x:Name="ModrinthSearchBox" Width="300" Height="28" Margin="0,0,8,6"
                                          KeyDown="ModrinthSearchBox_KeyDown"
                                          ToolTip="例如 sodium、iris、fabric api；回车搜索"/>
@@ -225,6 +231,7 @@
                             <Button Content="删除" Click="RemoveMod_Click" Padding="10,3" Margin="0,0,8,0"/>
                             <Button x:Name="CheckUpdatesButton" Content="检查/更新" Click="CheckUpdates_Click" Padding="10,3" Margin="0,0,8,0"/>
                             <Button x:Name="ScanConflictsButton" Content="扫描冲突" Click="ScanConflicts_Click" Padding="10,3" Margin="0,0,8,0"/>
+                            <Button Content="备份目录" Click="OpenModBackup_Click" Padding="10,3" Margin="0,0,8,0"/>
                             <Button Content="OptiFabric" Click="InstallOptiFabric_Click" Padding="10,3"/>
                         </WrapPanel>
                         <TextBlock x:Name="ModsPathText" Foreground="Gray" FontSize="11"
@@ -302,6 +309,17 @@
                             <TextBlock x:Name="DataDirText" Foreground="#888" Margin="0,8,0,0" TextWrapping="Wrap"/>
                             <Button Content="打开设置…" Margin="0,14,0,0" Padding="14,5" HorizontalAlignment="Left"
                                     Click="Settings_Click"/>
+                            <Separator Margin="0,16,0,10"/>
+                            <TextBlock Text="CurseForge API Key" FontWeight="SemiBold"/>
+                            <PasswordBox x:Name="CurseForgeKeyBox" Width="460" Height="28" Margin="0,8,0,0"
+                                         HorizontalAlignment="Left" ToolTip="从 CurseForge 开发者控制台申请"/>
+                            <WrapPanel Margin="0,8,0,0">
+                                <Button Content="保存 Key" Padding="14,4" Click="SaveCurseForgeKey_Click"/>
+                                <TextBlock x:Name="CurseForgeKeyStatus" Foreground="#888" VerticalAlignment="Center"
+                                           Margin="12,0,0,0"/>
+                            </WrapPanel>
+                            <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,6,0,0" FontSize="11"
+                                       Text="Key 用 DPAPI 加密保存在数据目录；不填 Key 时只能用 Modrinth。"/>
                         </StackPanel>
                     </Border>
 
