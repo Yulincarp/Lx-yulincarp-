@@ -186,14 +186,24 @@ public partial class MainWindow : Window
         {
             ApplyInstance(target);
         }
+        else
+        {
+            UpdatePackButton.IsEnabled = false;
+        }
 
         RefreshMods();
     }
 
     private void Instances_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_suppressInstanceEvents || InstancesList.SelectedItem is not Instance instance)
+        if (_suppressInstanceEvents)
         {
+            return;
+        }
+
+        if (InstancesList.SelectedItem is not Instance instance)
+        {
+            UpdatePackButton.IsEnabled = false;
             return;
         }
 
@@ -223,6 +233,7 @@ public partial class MainWindow : Window
             }
         }
 
+        UpdatePackButton.IsEnabled = PackRecord.Load(InstanceStore.DirFor(_installRoot, instance.Name)) is not null;
         StatusText.Text = $"实例：{instance.Name}";
         RefreshMods();
     }
@@ -314,6 +325,12 @@ public partial class MainWindow : Window
         }
 
         string dir = InstanceStore.DirFor(_installRoot, instance.Name);
+        if (PackRecord.Load(dir) is null)
+        {
+            Log("这个实例不是导入的整合包（没有 pack.json），「更新包」只对导入的整合包有效。");
+            return;
+        }
+
         try
         {
             int removed = await PackImporter.UpdateAsync(
