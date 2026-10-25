@@ -35,6 +35,7 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _launchCts;
     private DateTime _launchStartedAt;
     private bool _closing;
+    private bool _modrinthBusy;
 
     private sealed record LoaderChoice(string Version, string Display, bool Stable = false);
 
@@ -914,10 +915,168 @@ public partial class MainWindow : Window
         }
     }
 
+    // ---------- Modrinth 在线安装 ----------
+
+    private bool TryGetModContext(out string gameVersion, out string loader)
+    {
+        gameVersion = (VersionBox.SelectedItem as ManifestVersion)?.Id ?? string.Empty;
+        loader = LoaderBox.SelectedIndex switch
+        {
+            1 => "fabric",
+            2 => "forge",
+            3 => "neoforge",
+            _ => string.Empty,
+        };
+
+        if (gameVersion.Length == 0)
+        {
+            Log("先选一个 Minecraft 版本");
+            return false;
+        }
+
+        if (loader.Length == 0)
+        {
+            Log("原版不能装 mod；先在「版本」页选 Fabric/Forge/NeoForge");
+            return false;
+        }
+
+        return true;
+    }
+
+    private async void ModrinthSearch_Click(object sender, RoutedEventArgs e)
+    {
+        if (!TryGetModContext(out string gameVersion, out string loader))
+        {
+            return;
+        }
+
+        string query = ModrinthSearchBox.Text.Trim();
+        if (query.Length == 0)
+        {
+            Log("输入搜索关键词，例如 sodium 或 iris");
+            return;
+        }
+
+        ModrinthSearchButton.IsEnabled = false;
+        ModrinthStatusText.Text = "搜索中…";
+        try
+        {
+            List<ModSearchResult> results = await ModrinthClient.SearchAsync(query, gameVersion, loader, 20);
+            ModrinthResults.ItemsSource = results;
+            ModrinthStatusText.Text = results.Count == 0 ? "没有结果" : $"找到 {results.Count} 个";
+            Log($"[mods] Modrinth 搜索「{query}」({gameVersion}/{loader})：{results.Count} 个");
+        }
+        catch (Exception ex)
+        {
+            ModrinthStatusText.Text = "搜索失败";
+            LogError("Modrinth 搜索失败", ex);
+        }
+        finally
+        {
+            ModrinthSearchButton.IsEnabled = true;
+        }
+    }
+
+    private async void ModrinthInstall_Click(object sender, RoutedEventArgs e)
+    {
+        if (_modrinthBusy)
+        {
+            Log("正在安装另一个 mod，等它完成");
+            return;
+        }
+
+        if (_launchCts is not null || (_gameProcess is { } game && !game.HasExited))
+        {
+            Log("先等启动/游戏结束再安装 mod");
+            return;
+        }
+
+        if (ModrinthResults.SelectedItem is not ModSearchResult project)
+        {
+            Log("先在搜索结果里选一个 mod");
+            return;
+        }
+
+        if (!TryGetModContext(out string gameVersion, out string loader))
+        {
+            return;
+        }
+
+        string modsDir = ModManager.ModsDir(CurrentGameDir());
+        _modrinthBusy = true;
+        ModrinthSearchButton.IsEnabled = false;
+        ModrinthInstallButton.IsEnabled = false;
+        ModrinthStatusText.Text = "安装中…";
+        _downloadFailures.Clear();
+        CopyFailuresButton.IsEnabled = false;
+        CopyFailuresButton.Content = "复制失败清单";
+        StatusText.Text = $"安装 {project.Title}…";
+        Progress.Value = 0;
+        Progress.Maximum = 1;
+
+        try
+        {
+            var progress = new Progress<ModInstallProgress>(p =>
+            {
+                Progress.Maximum = Math.Max(p.Total, 1);
+                Progress.Value = p.Done;
+                StatusText.Text = $"安装 {p.Done}/{p.Total}";
+            });
+
+            Action<DownloadFailure> onFailure = failure => _downloadFailures.Enqueue(failure);
+
+            int failed = await ModInstaller.InstallAsync(
+                project.Id,
+                gameVersion,
+                loader,
+                _installRoot,
+                modsDir,
+                message => Dispatcher.Invoke(() => Log(message)),
+                progress,
+                onFailure);
+
+            if (failed > 0)
+            {
+                CopyFailuresButton.IsEnabled = true;
+                CopyFailuresButton.Content = $"复制失败清单 ({failed})";
+                ModrinthStatusText.Text = $"安装完成，失败 {failed} 个";
+                StatusText.Text = $"安装完成，失败 {failed} 个";
+                Log($"[警告] {project.Title} 安装完成，但 {failed} 个文件失败");
+            }
+            else
+            {
+                Progress.Value = Progress.Maximum;
+                ModrinthStatusText.Text = $"已安装 {project.Title}";
+                StatusText.Text = $"已安装 {project.Title}";
+                Log($"[mods] 已安装 {project.Title} 到 {modsDir}");
+            }
+
+            RefreshMods();
+        }
+        catch (Exception ex)
+        {
+            ModrinthStatusText.Text = "安装失败";
+            StatusText.Text = "安装失败";
+            LogError("安装 mod 失败", ex);
+        }
+        finally
+        {
+            _modrinthBusy = false;
+            ModrinthSearchButton.IsEnabled = true;
+            ModrinthInstallButton.IsEnabled = true;
+        }
+    }
+
     // ---------- 启动 ----------
 
     private async void Launch_Click(object sender, RoutedEventArgs e)
     {
+        if (_modrinthBusy)
+        {
+            Log("正在安装 mod，等安装完成再启动");
+            return;
+        }
+
         if (_launchCts is not null)
         {
             // 防手快双击：刚点完"启动"的 600ms 内不把第二下当成取消
@@ -1087,6 +1246,12 @@ public partial class MainWindow : Window
 
     private async void Repair_Click(object sender, RoutedEventArgs e)
     {
+        if (_modrinthBusy)
+        {
+            Log("正在安装 mod，等安装完成再校验");
+            return;
+        }
+
         if (_launchCts is not null)
         {
             Log("正在启动/校验，等当前任务结束");

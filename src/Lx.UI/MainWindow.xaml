@@ -167,15 +167,47 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
                     <StackPanel Grid.Row="0">
                         <TextBlock Text="资源" FontSize="24" FontWeight="Bold"/>
-                        <TextBlock Text="当前实例的 mods 列表" Foreground="#888" Margin="0,4,0,0"/>
+                        <TextBlock Text="Modrinth 搜索安装 + 当前实例的本地 mods" Foreground="#888" Margin="0,4,0,0"/>
                     </StackPanel>
 
-                    <StackPanel Grid.Row="1" Margin="0,16,0,8">
+                    <GroupBox Grid.Row="1" Header="Modrinth 在线安装" Margin="0,16,0,0">
+                        <StackPanel>
+                            <WrapPanel>
+                                <TextBox x:Name="ModrinthSearchBox" Width="300" Height="28" Margin="0,0,8,6"
+                                         ToolTip="例如 sodium、iris、fabric api"/>
+                                <Button x:Name="ModrinthSearchButton" Content="搜索" Padding="14,4" Margin="0,0,8,6"
+                                        Click="ModrinthSearch_Click"/>
+                                <Button x:Name="ModrinthInstallButton" Content="安装选中" Padding="14,4" Margin="0,0,8,6"
+                                        Click="ModrinthInstall_Click"/>
+                                <TextBlock x:Name="ModrinthStatusText" Foreground="#888" VerticalAlignment="Center"
+                                           Margin="0,0,0,6" TextTrimming="CharacterEllipsis"/>
+                            </WrapPanel>
+                            <ListBox x:Name="ModrinthResults" Height="150" BorderThickness="0">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,2">
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding Description}" Foreground="#777" FontSize="11"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Foreground="#999" FontSize="11">
+                                                <Run Text="{Binding Author}"/>
+                                                <Run Text=" · 下载 "/>
+                                                <Run Text="{Binding Downloads}"/>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <StackPanel Grid.Row="2" Margin="0,12,0,8">
                         <TextBox x:Name="ModSearch" Height="28" Margin="0,0,0,6" TextChanged="ModSearch_Changed"
                                  ToolTip="按名字 / 文件名 / mod id 过滤"/>
                         <ComboBox x:Name="ModSort" Height="26" Margin="0,0,0,6" SelectedIndex="0"
@@ -195,7 +227,7 @@
                                    Margin="0,8,0,0" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
 
-                    <ListView Grid.Row="2" x:Name="ModsList" BorderThickness="0">
+                    <ListView Grid.Row="3" x:Name="ModsList" BorderThickness="0">
                         <ListView.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
