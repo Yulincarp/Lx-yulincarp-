@@ -18,14 +18,19 @@
 
             <StackPanel Orientation="Horizontal" Margin="0,0,12,6">
                 <TextBlock Text="加载器" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                <ComboBox x:Name="LoaderBox" Width="80" VerticalAlignment="Center" SelectedIndex="0"
+                <ComboBox x:Name="LoaderBox" Width="85" VerticalAlignment="Center" SelectedIndex="0"
                           SelectionChanged="Loader_Changed">
                     <ComboBoxItem Content="原版"/>
                     <ComboBoxItem Content="Fabric"/>
+                    <ComboBoxItem Content="Forge"/>
+                    <ComboBoxItem Content="NeoForge"/>
                 </ComboBox>
-                <ComboBox x:Name="LoaderVersionBox" Width="140" Margin="6,0,0,0" VerticalAlignment="Center"
+                <ComboBox x:Name="LoaderVersionBox" Width="150" Margin="6,0,0,0" VerticalAlignment="Center"
                           IsEnabled="False" DisplayMemberPath="Display"
-                          ToolTip="Fabric 加载器版本；老版本或快照可手动选旧版"/>
+                          ToolTip="加载器版本；Fabric 启动时自动安装，Forge/NeoForge 先点「安装」"/>
+                <Button x:Name="InstallLoaderButton" Content="安装" Margin="6,0,0,0" Padding="10,3"
+                        IsEnabled="False" Click="InstallLoader_Click"
+                        ToolTip="Forge/NeoForge 专用：先安装，再把版本切到生成的条目；Fabric 在启动时自动安装"/>
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" Margin="0,0,12,6">

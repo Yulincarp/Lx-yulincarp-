@@ -35,10 +35,14 @@ public partial class MainWindow : Window
     private DateTime _launchStartedAt;
     private bool _closing;
 
-    private readonly Dictionary<string, List<FabricLoaderVersion>> _loaderVersionCache = new();
+    private sealed record LoaderChoice(string Version, string Display, bool Stable = false);
+
+    private readonly Dictionary<string, List<LoaderChoice>> _loaderVersionCache = new();
     private int _loaderVersionRequest;
 
     private bool IsFabricSelected => LoaderBox.SelectedIndex == 1;
+
+    private bool IsForgeSelected => LoaderBox.SelectedIndex is 2 or 3;
 
     public MainWindow()
     {
@@ -261,6 +265,12 @@ public partial class MainWindow : Window
 
     private void CreateInstance_Click(object sender, RoutedEventArgs e)
     {
+        if (IsForgeSelected)
+        {
+            Log("Forge/NeoForge 请先点「安装」，安装后会生成独立版本，再用它创建实例");
+            return;
+        }
+
         string version = (VersionBox.SelectedItem as ManifestVersion)?.Id ?? "1.20.4";
         string raw = NewInstanceName.Text.Trim();
         if (raw.Length == 0)
@@ -280,7 +290,7 @@ public partial class MainWindow : Window
         }
 
         string? loader = IsFabricSelected ? "fabric" : null;
-        string? loaderVersion = IsFabricSelected ? (LoaderVersionBox.SelectedItem as FabricLoaderVersion)?.Version : null;
+        string? loaderVersion = IsFabricSelected ? (LoaderVersionBox.SelectedItem as LoaderChoice)?.Version : null;
         if (IsFabricSelected && loaderVersion is null)
         {
             Log("Fabric 版本列表还没加载好，等下拉框里有版本再试");
@@ -443,12 +453,14 @@ public partial class MainWindow : Window
 
     private void Loader_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (LoaderVersionBox is null)
+        if (LoaderVersionBox is null || InstallLoaderButton is null)
         {
             return;
         }
 
-        if (!IsFabricSelected)
+        InstallLoaderButton.IsEnabled = false;
+
+        if (LoaderBox.SelectedIndex == 0)
         {
             LoaderVersionBox.ItemsSource = null;
             LoaderVersionBox.IsEnabled = false;
@@ -461,7 +473,10 @@ public partial class MainWindow : Window
     private async Task ReloadLoaderVersionsAsync(string? preferredVersion)
     {
         int request = ++_loaderVersionRequest;
-        if (!IsFabricSelected)
+        int kind = LoaderBox.SelectedIndex;
+        InstallLoaderButton.IsEnabled = false;
+
+        if (kind == 0)
         {
             LoaderVersionBox.ItemsSource = null;
             LoaderVersionBox.IsEnabled = false;
@@ -475,12 +490,25 @@ public partial class MainWindow : Window
         }
 
         LoaderVersionBox.IsEnabled = false;
+        string cacheKey = $"{kind}:{versionId}";
         try
         {
-            if (!_loaderVersionCache.TryGetValue(versionId, out List<FabricLoaderVersion>? versions))
+            if (!_loaderVersionCache.TryGetValue(cacheKey, out List<LoaderChoice>? versions))
             {
-                versions = await FabricInstaller.GetLoaderVersionsAsync(versionId);
-                _loaderVersionCache[versionId] = versions;
+                versions = kind switch
+                {
+                    1 => (await FabricInstaller.GetLoaderVersionsAsync(versionId))
+                            .Select(v => new LoaderChoice(v.Version, v.Stable ? $"{v.Version}（稳定）" : v.Version, v.Stable))
+                            .ToList(),
+                    2 => (await ForgeInstaller.GetForgeVersionsAsync(versionId))
+                            .Select(v => new LoaderChoice(v, ShortForgeVersion(v, versionId)))
+                            .ToList(),
+                    3 => (await ForgeInstaller.GetNeoForgeVersionsAsync(versionId))
+                            .Select(v => new LoaderChoice(v, v))
+                            .ToList(),
+                    _ => new List<LoaderChoice>(),
+                };
+                _loaderVersionCache[cacheKey] = versions;
             }
 
             if (request != _loaderVersionRequest)
@@ -489,16 +517,18 @@ public partial class MainWindow : Window
             }
 
             LoaderVersionBox.ItemsSource = versions;
-            FabricLoaderVersion? selected = preferredVersion is null
+            LoaderChoice? selected = preferredVersion is null
                 ? null
                 : versions.FirstOrDefault(v => string.Equals(v.Version, preferredVersion, StringComparison.OrdinalIgnoreCase));
             selected ??= versions.FirstOrDefault(v => v.Stable) ?? versions.FirstOrDefault();
             LoaderVersionBox.SelectedItem = selected;
             LoaderVersionBox.IsEnabled = versions.Count > 0;
+            InstallLoaderButton.IsEnabled = IsForgeSelected && versions.Count > 0;
 
             if (versions.Count == 0)
             {
-                Log($"Fabric 没有支持 {versionId} 的加载器版本");
+                string name = kind == 1 ? "Fabric" : kind == 2 ? "Forge" : "NeoForge";
+                Log($"{name} 没有支持 {versionId} 的版本");
             }
         }
         catch (Exception ex)
@@ -508,9 +538,93 @@ public partial class MainWindow : Window
                 return;
             }
 
-            LogError($"获取 Fabric 版本列表失败（{versionId}）", ex);
+            LogError($"获取加载器版本列表失败（{versionId}）", ex);
             LoaderVersionBox.ItemsSource = null;
             LoaderVersionBox.IsEnabled = false;
+            InstallLoaderButton.IsEnabled = false;
+        }
+    }
+
+    private static string ShortForgeVersion(string full, string minecraftVersion) =>
+        full.StartsWith(minecraftVersion + "-", StringComparison.OrdinalIgnoreCase)
+            ? full[(minecraftVersion.Length + 1)..]
+            : full;
+
+    private async void InstallLoader_Click(object sender, RoutedEventArgs e)
+    {
+        if (!IsForgeSelected)
+        {
+            return;
+        }
+
+        if (VersionBox.SelectedItem is not ManifestVersion baseVersion || baseVersion.Id is null)
+        {
+            Log("先选一个 Minecraft 版本");
+            return;
+        }
+
+        if (LoaderVersionBox.SelectedItem is not LoaderChoice choice)
+        {
+            Log("加载器版本列表还没加载好，等下拉框里有版本再点安装");
+            return;
+        }
+
+        string loader = LoaderBox.SelectedIndex == 2 ? "forge" : "neoforge";
+        string display = loader == "forge" ? "Forge" : "NeoForge";
+
+        InstallLoaderButton.IsEnabled = false;
+        LaunchButton.IsEnabled = false;
+        Progress.IsIndeterminate = true;
+        StatusText.Text = $"正在安装 {display} {choice.Version}…";
+
+        try
+        {
+            string installedId = await ForgeInstaller.InstallAsync(
+                baseVersion.Id,
+                _installRoot,
+                loader,
+                choice.Version,
+                message => Dispatcher.Invoke(() => Log(message)));
+
+            Log($"安装完成：{display} {choice.Version} → {installedId}");
+            StatusText.Text = $"已安装 {installedId}";
+
+            if (VersionBox.ItemsSource is List<ManifestVersion> versions)
+            {
+                ManifestVersion? installed = versions.FirstOrDefault(v =>
+                    string.Equals(v.Id, installedId, StringComparison.OrdinalIgnoreCase));
+                if (installed is null)
+                {
+                    installed = new ManifestVersion { Id = installedId, Type = "local" };
+                    versions.Insert(0, installed);
+                }
+
+                VersionBox.SelectedItem = installed;
+            }
+
+            LoaderBox.SelectedIndex = 0;
+
+            if (InstancesList.SelectedItem is Instance instance)
+            {
+                InstanceStore.AddOrUpdate(_installRoot, instance with
+                {
+                    VersionId = installedId,
+                    Loader = null,
+                    LoaderVersion = null,
+                });
+                RefreshInstances(instance.Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            LogError($"安装 {display} 失败", ex);
+            StatusText.Text = "安装失败";
+        }
+        finally
+        {
+            Progress.IsIndeterminate = false;
+            LaunchButton.IsEnabled = _gameProcess is null;
+            InstallLoaderButton.IsEnabled = IsForgeSelected && LoaderVersionBox.Items.Count > 0;
         }
     }
 
@@ -749,8 +863,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (IsForgeSelected)
+        {
+            Log("Forge/NeoForge 需要先点「安装」生成版本；安装后会自动切到生成的条目，再启动。");
+            return;
+        }
+
         string? loader = IsFabricSelected ? "fabric" : null;
-        string? loaderVersion = IsFabricSelected ? (LoaderVersionBox.SelectedItem as FabricLoaderVersion)?.Version : null;
+        string? loaderVersion = IsFabricSelected ? (LoaderVersionBox.SelectedItem as LoaderChoice)?.Version : null;
         if (IsFabricSelected && string.IsNullOrEmpty(loaderVersion))
         {
             Log("Fabric 版本列表还没加载好，等下拉框里有版本再启动");

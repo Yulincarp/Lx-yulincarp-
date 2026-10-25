@@ -15,6 +15,7 @@ public static class ForgeInstaller
     // 国内直连 maven.neoforged.net 基本不通，BMCLAPI 镜像了同一个 maven 目录。
     private const string NeoForgeMirrorBase = "https://bmclapi2.bangbang93.com/maven/";
     private const string NeoForgeMirrorMetadata = NeoForgeMirrorBase + "net/neoforged/neoforge/maven-metadata.xml";
+    private const string ForgeMirrorMetadata = NeoForgeMirrorBase + "net/minecraftforge/forge/maven-metadata.xml";
 
     // 有些 maven（Cloudflare 后面）对 HTTP/2 支持不好，会一直挂着，强制 HTTP/1.1。
     private static readonly HttpClient Http = new(new HttpClientHandler())
@@ -27,6 +28,37 @@ public static class ForgeInstaller
     static ForgeInstaller()
     {
         Http.DefaultRequestHeaders.UserAgent.ParseAdd("Lx-Launcher/0.1");
+    }
+
+    // 给界面用：列出某个 Minecraft 版本可用的 Forge 版本（完整坐标，如 1.20.1-47.2.0，新到旧）。
+    public static async Task<List<string>> GetForgeVersionsAsync(string minecraftVersion)
+    {
+        string xml = await GetTextWithFallbackAsync(ForgeMetadata, ForgeMirrorMetadata, _ => { }).ConfigureAwait(false);
+        return ReadVersions(xml)
+            .Where(version => version.StartsWith(minecraftVersion + "-", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(version => version, Comparer<string>.Create(CompareVersions))
+            .ToList();
+    }
+
+    // 给界面用：列出某个 Minecraft 版本可用的 NeoForge 版本（如 21.1.264，新到旧）。
+    public static async Task<List<string>> GetNeoForgeVersionsAsync(string minecraftVersion)
+    {
+        string prefix;
+        try
+        {
+            prefix = NeoForgePrefix(minecraftVersion);
+        }
+        catch (InvalidOperationException)
+        {
+            return new List<string>(); // 快照/非 1.x 版本没有 NeoForge
+        }
+
+        string xml = await GetTextWithFallbackAsync(NeoForgeMetadata, NeoForgeMirrorMetadata, _ => { }).ConfigureAwait(false);
+        return ReadVersions(xml)
+            .Where(version => version.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .Where(version => !version.Contains('-', StringComparison.Ordinal))
+            .OrderByDescending(version => version, Comparer<string>.Create(CompareVersions))
+            .ToList();
     }
 
     public static async Task<string> InstallAsync(
