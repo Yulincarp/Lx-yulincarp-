@@ -4,8 +4,11 @@ using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using Lx.Probe;
 using Lx.Probe.Auth;
 using Lx.Probe.Instances;
@@ -917,30 +920,94 @@ public partial class MainWindow : Window
 
     // ---------- Modrinth 在线安装 ----------
 
+    // 搜索/安装的加载器上下文：
+    // 1) 下拉框显式选了 Fabric/Forge/NeoForge 就用它；
+    // 2) 否则从当前实例/版本 id 推断（neoforge-21.1.264 / fabric-loader-... / forge-...）；
+    // 3) 游戏版本优先读 version.json 的 inheritsFrom，避免拿 neoforge-21.1.264 当 MC 版本去搜。
     private bool TryGetModContext(out string gameVersion, out string loader)
     {
-        gameVersion = (VersionBox.SelectedItem as ManifestVersion)?.Id ?? string.Empty;
+        gameVersion = string.Empty;
+        loader = string.Empty;
+
+        Instance? instance = InstancesList.SelectedItem as Instance;
+
+        // 实例的 VersionId 才是 mods 真正对应的版本（例如 neoforge-21.1.264）；
+        // 版本下拉框只用于启动，不能拿它覆盖实例上下文。
+        string versionId = instance?.VersionId
+                           ?? (VersionBox.SelectedItem as ManifestVersion)?.Id
+                           ?? string.Empty;
+        if (versionId.Length == 0)
+        {
+            FailModContext("先选一个 Minecraft 版本或实例");
+            return false;
+        }
+        if (instance is not null && string.Equals(instance.VersionId, versionId, StringComparison.OrdinalIgnoreCase))
+        {
+            loader = instance.Loader?.ToLowerInvariant() ?? string.Empty;
+        }
+
         loader = LoaderBox.SelectedIndex switch
         {
             1 => "fabric",
             2 => "forge",
             3 => "neoforge",
-            _ => string.Empty,
+            _ => loader,
         };
 
-        if (gameVersion.Length == 0)
+        string lowerId = versionId.ToLowerInvariant();
+        if (loader.Length == 0)
         {
-            Log("先选一个 Minecraft 版本");
-            return false;
+            if (lowerId.StartsWith("neoforge-", StringComparison.Ordinal))
+            {
+                loader = "neoforge";
+            }
+            else if (lowerId.StartsWith("forge-", StringComparison.Ordinal))
+            {
+                loader = "forge";
+            }
+            else if (lowerId.StartsWith("fabric-loader-", StringComparison.Ordinal))
+            {
+                loader = "fabric";
+            }
+        }
+
+        gameVersion = versionId;
+        string versionJson = Path.Combine(_installRoot, "versions", versionId, versionId + ".json");
+        if (File.Exists(versionJson))
+        {
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(File.ReadAllText(versionJson));
+                if (document.RootElement.TryGetProperty("inheritsFrom", out JsonElement parent) &&
+                    parent.ValueKind == JsonValueKind.String &&
+                    parent.GetString() is { Length: > 0 } parentId)
+                {
+                    gameVersion = parentId;
+                }
+            }
+            catch (JsonException)
+            {
+                // 版本 json 坏了就退回 versionId
+            }
         }
 
         if (loader.Length == 0)
         {
-            Log("原版不能装 mod；先在「版本」页选 Fabric/Forge/NeoForge");
+            FailModContext("当前是原版；先在「版本」页选 Fabric/Forge/NeoForge，或选一个已装加载器的实例/版本");
             return false;
         }
 
+        ModrinthStatusText.Foreground = Brushes.Gray;
+        ModrinthContextText.Text = $"当前：{gameVersion} / {loader}";
         return true;
+    }
+
+    private void FailModContext(string message)
+    {
+        ModrinthStatusText.Text = message;
+        ModrinthStatusText.Foreground = Brushes.OrangeRed;
+        ModrinthContextText.Text = "当前：未确定加载器";
+        Log(message);
     }
 
     private async void ModrinthSearch_Click(object sender, RoutedEventArgs e)
@@ -953,6 +1020,8 @@ public partial class MainWindow : Window
         string query = ModrinthSearchBox.Text.Trim();
         if (query.Length == 0)
         {
+            ModrinthStatusText.Text = "先输入搜索关键词，例如 sodium 或 iris";
+            ModrinthStatusText.Foreground = Brushes.OrangeRed;
             Log("输入搜索关键词，例如 sodium 或 iris");
             return;
         }
@@ -977,6 +1046,15 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ModrinthSearchBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            ModrinthSearch_Click(sender, e);
+        }
+    }
+
     private async void ModrinthInstall_Click(object sender, RoutedEventArgs e)
     {
         if (_modrinthBusy)
@@ -993,6 +1071,8 @@ public partial class MainWindow : Window
 
         if (ModrinthResults.SelectedItem is not ModSearchResult project)
         {
+            ModrinthStatusText.Text = "先在搜索结果里选一个 mod（需要先点「搜索」）";
+            ModrinthStatusText.Foreground = Brushes.OrangeRed;
             Log("先在搜索结果里选一个 mod");
             return;
         }

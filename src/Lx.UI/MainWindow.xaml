@@ -180,12 +180,15 @@
                         <StackPanel>
                             <WrapPanel>
                                 <TextBox x:Name="ModrinthSearchBox" Width="300" Height="28" Margin="0,0,8,6"
-                                         ToolTip="例如 sodium、iris、fabric api"/>
+                                         KeyDown="ModrinthSearchBox_KeyDown"
+                                         ToolTip="例如 sodium、iris、fabric api；回车搜索"/>
                                 <Button x:Name="ModrinthSearchButton" Content="搜索" Padding="14,4" Margin="0,0,8,6"
                                         Click="ModrinthSearch_Click"/>
                                 <Button x:Name="ModrinthInstallButton" Content="安装选中" Padding="14,4" Margin="0,0,8,6"
                                         Click="ModrinthInstall_Click"/>
                                 <TextBlock x:Name="ModrinthStatusText" Foreground="#888" VerticalAlignment="Center"
+                                           Margin="0,0,12,6" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="ModrinthContextText" Foreground="#777" VerticalAlignment="Center"
                                            Margin="0,0,0,6" TextTrimming="CharacterEllipsis"/>
                             </WrapPanel>
                             <ListBox x:Name="ModrinthResults" Height="150" BorderThickness="0">
