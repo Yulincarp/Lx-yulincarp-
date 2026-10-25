@@ -1,7 +1,7 @@
 <Window x:Class="Lx.UI.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Lx Launcher" Height="700" Width="1240" FontSize="13" Closing="MainWindow_Closing">
+        Title="Lx Launcher" Height="720" Width="1260" FontSize="13" Closing="MainWindow_Closing">
     <Grid Margin="14">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="150"/>
@@ -12,220 +12,294 @@
             <TextBlock Text="Lx Launcher" FontSize="18" FontWeight="Bold"/>
             <TextBlock x:Name="SidebarVersionText" Foreground="#888" Margin="0,2,0,18"/>
             <Button Content="首页" Click="Home_Click" HorizontalContentAlignment="Left" Padding="12,8" Margin="0,0,0,6"/>
-            <Button Content="管理" Click="Manage_Click" HorizontalContentAlignment="Left" Padding="12,8" Margin="0,0,0,6"/>
-            <Button Content="设置" Click="Settings_Click" HorizontalContentAlignment="Left" Padding="12,8" Margin="0,0,0,6"/>
-            <Button Content="日志" Click="ShowLogs_Click" HorizontalContentAlignment="Left" Padding="12,8"/>
-            <TextBlock Text="首页看实例，管理里改版本/加载器/Mods。" Foreground="#999" TextWrapping="Wrap" Margin="0,22,0,0" FontSize="11"/>
+            <Button Content="版本" Click="VersionPage_Click" HorizontalContentAlignment="Left" Padding="12,8" Margin="0,0,0,6"/>
+            <Button Content="实例" Click="InstancePage_Click" HorizontalContentAlignment="Left" Padding="12,8" Margin="0,0,0,6"/>
+            <Button Content="资源" Click="ResourcePage_Click" HorizontalContentAlignment="Left" Padding="12,8" Margin="0,0,0,6"/>
+            <Button Content="账号" Click="AccountPage_Click" HorizontalContentAlignment="Left" Padding="12,8" Margin="0,0,0,6"/>
+            <Button Content="设置" Click="SettingsPage_Click" HorizontalContentAlignment="Left" Padding="12,8" Margin="0,0,0,6"/>
+            <Button Content="日志" Click="LogPage_Click" HorizontalContentAlignment="Left" Padding="12,8"/>
+            <TextBlock Text="首页选实例，底部启动；版本/实例/资源/账号分页管理。" Foreground="#999" TextWrapping="Wrap" Margin="0,22,0,0" FontSize="11"/>
         </StackPanel>
 
         <Grid Grid.Column="1">
-            <Grid x:Name="ManageView">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
-                <WrapPanel Grid.Row="0">
-                    <StackPanel Orientation="Horizontal" Margin="0,0,12,6">
-                        <TextBlock Text="版本" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <ComboBox x:Name="VersionBox" Width="130" VerticalAlignment="Center"
-                                  SelectionChanged="Version_Changed"/>
+            <Grid Grid.Row="0">
+                <Grid x:Name="HomeView">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0">
+                        <TextBlock Text="首页" FontSize="24" FontWeight="Bold"/>
+                        <TextBlock Text="选一个实例，然后点底部「启动游戏」" Foreground="#888" Margin="0,4,0,0"/>
                     </StackPanel>
 
-                    <StackPanel Orientation="Horizontal" Margin="0,0,12,6">
-                        <TextBlock Text="加载器" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <ComboBox x:Name="LoaderBox" Width="85" VerticalAlignment="Center" SelectedIndex="0"
-                                  SelectionChanged="Loader_Changed">
-                            <ComboBoxItem Content="原版"/>
-                            <ComboBoxItem Content="Fabric"/>
-                            <ComboBoxItem Content="Forge"/>
-                            <ComboBoxItem Content="NeoForge"/>
-                        </ComboBox>
-                        <ComboBox x:Name="LoaderVersionBox" Width="150" Margin="6,0,0,0" VerticalAlignment="Center"
-                                  IsEnabled="False" DisplayMemberPath="Display"
-                                  ToolTip="加载器版本；Fabric 启动时自动安装，Forge/NeoForge 先点「安装」"/>
-                        <Button x:Name="InstallLoaderButton" Content="安装" Margin="6,0,0,0" Padding="10,3"
-                                IsEnabled="False" Click="InstallLoader_Click"
-                                ToolTip="Forge/NeoForge 专用：先安装，再把版本切到生成的条目；Fabric 在启动时自动安装"/>
+                    <Border Grid.Row="1" Background="#F7F7F7" CornerRadius="6" Padding="16" Margin="0,16,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="实例" Foreground="#888" FontSize="11"/>
+                                <TextBlock Text="{Binding SelectedItem.Name, ElementName=InstancesList}" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="版本" Foreground="#888" FontSize="11"/>
+                                <TextBlock Text="{Binding SelectedItem.Id, ElementName=VersionBox}" FontSize="16"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="加载器" Foreground="#888" FontSize="11"/>
+                                <TextBlock Text="{Binding SelectedItem.Content, ElementName=LoaderBox}" FontSize="16"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="3">
+                                <TextBlock Text="账号" Foreground="#888" FontSize="11"/>
+                                <TextBlock Text="{Binding SelectedItem.Name, ElementName=AccountBox}" FontSize="16"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <GroupBox Grid.Row="2" Header="实例" Margin="0,16,0,0">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl x:Name="HomeInstances">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Tag="{Binding}" Click="HomeInstance_Click" Width="180" Height="72"
+                                                Margin="0,0,10,10" Padding="12,8" HorizontalContentAlignment="Stretch">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding VersionId}" Foreground="#888" FontSize="11" Margin="0,4,0,0"/>
+                                                <TextBlock Text="{Binding Loader}" Foreground="#888" FontSize="11"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </GroupBox>
+                </Grid>
+
+                <Grid x:Name="VersionView" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0">
+                        <TextBlock Text="版本与加载器" FontSize="24" FontWeight="Bold"/>
+                        <TextBlock Text="先选 Minecraft 版本，再决定原版/Fabric/Forge/NeoForge" Foreground="#888" Margin="0,4,0,0"/>
                     </StackPanel>
 
-                    <StackPanel Orientation="Horizontal" Margin="0,0,12,6">
-                        <TextBlock Text="账号" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <ComboBox x:Name="AccountBox" Width="140" VerticalAlignment="Center" DisplayMemberPath="Name"/>
+                    <Border Grid.Row="1" Background="#F7F7F7" CornerRadius="6" Padding="16" Margin="0,16,0,0">
+                        <WrapPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,16,8">
+                                <TextBlock Text="版本" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <ComboBox x:Name="VersionBox" Width="160" VerticalAlignment="Center"
+                                          SelectionChanged="Version_Changed"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,16,8">
+                                <TextBlock Text="加载器" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <ComboBox x:Name="LoaderBox" Width="95" VerticalAlignment="Center" SelectedIndex="0"
+                                          SelectionChanged="Loader_Changed">
+                                    <ComboBoxItem Content="原版"/>
+                                    <ComboBoxItem Content="Fabric"/>
+                                    <ComboBoxItem Content="Forge"/>
+                                    <ComboBoxItem Content="NeoForge"/>
+                                </ComboBox>
+                                <ComboBox x:Name="LoaderVersionBox" Width="170" Margin="6,0,0,0" VerticalAlignment="Center"
+                                          IsEnabled="False" DisplayMemberPath="Display"
+                                          ToolTip="加载器版本；Fabric 启动时自动安装，Forge/NeoForge 先点「安装」"/>
+                                <Button x:Name="InstallLoaderButton" Content="安装" Margin="6,0,0,0" Padding="10,3"
+                                        IsEnabled="False" Click="InstallLoader_Click"
+                                        ToolTip="Forge/NeoForge 专用：先安装，再把版本切到生成的条目；Fabric 在启动时自动安装"/>
+                            </StackPanel>
+                        </WrapPanel>
+                    </Border>
+
+                    <TextBlock Grid.Row="2" Foreground="#888" TextWrapping="Wrap" Margin="0,14,0,0"
+                               Text="Fabric 选版本即可，启动时自动合并；Forge/NeoForge 选版本后点「安装」，安装完版本会自动切到生成的条目。启动按钮在底部。"/>
+                </Grid>
+
+                <Grid x:Name="InstanceView" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0">
+                        <TextBlock Text="实例" FontSize="24" FontWeight="Bold"/>
+                        <TextBlock Text="每个实例有自己的存档、mods、设置" Foreground="#888" Margin="0,4,0,0"/>
                     </StackPanel>
 
-                    <StackPanel Orientation="Horizontal" Margin="0,0,12,6">
-                        <TextBlock Text="离线名" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <TextBox x:Name="NameBox" Width="80" VerticalAlignment="Center"/>
-                        <Button Content="添加" Margin="8,0,0,0" Padding="8,3" Click="AddAccount_Click"/>
-                    </StackPanel>
-
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                        <Button Content="登录" Padding="8,3" Click="Login_Click"/>
-                        <Button Content="正版登录" Margin="8,0,0,0" Padding="8,3" Click="MicrosoftLogin_Click"/>
-                        <Button Content="切换角色" Margin="8,0,0,0" Padding="8,3" Click="SwitchRole_Click"/>
-                        <Button Content="设置" Margin="8,0,0,0" Padding="8,3" Click="Settings_Click"/>
-                    </StackPanel>
-                </WrapPanel>
-
-                <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,12,0,0">
-                    <Button x:Name="LaunchButton" Content="启动游戏" Padding="20,6" Click="Launch_Click"/>
-                    <ProgressBar x:Name="Progress" Width="260" Height="18" Margin="16,0,0,0" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="StatusText" Margin="12,0,0,0" VerticalAlignment="Center" Foreground="Gray"/>
-                    <Button x:Name="CopyFailuresButton" Content="复制失败清单" Margin="16,0,0,0" Padding="10,3"
-                            IsEnabled="False" Click="CopyFailures_Click"/>
-                    <Button Content="打开日志" Margin="8,0,0,0" Padding="10,3" Click="OpenLogs_Click"/>
-                    <Button x:Name="RepairButton" Content="校验/修复" Margin="8,0,0,0" Padding="10,3"
-                            Click="Repair_Click" ToolTip="按 sha1 重新检查并补齐当前版本/实例的文件"/>
-                </StackPanel>
-
-                <Grid Grid.Row="2" Margin="0,12,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="260"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="390"/>
-                    </Grid.ColumnDefinitions>
-
-                    <GroupBox Grid.Column="0" Header="实例" Margin="0,0,12,0">
+                    <GroupBox Grid.Row="1" Margin="0,16,0,0">
                         <DockPanel>
                             <StackPanel DockPanel.Dock="Top">
-                                <TextBox x:Name="NewInstanceName" Height="24" Margin="0,0,0,6"/>
-                                <WrapPanel>
-                                    <Button Content="新建" Click="CreateInstance_Click" Padding="10,3" Margin="0,0,6,0"/>
-                                    <Button Content="删除" Click="DeleteInstance_Click" Padding="10,3" Margin="0,0,6,0"/>
-                                    <Button Content="导入" Click="ImportPack_Click" Padding="10,3" Margin="0,0,6,0"/>
-                                    <Button x:Name="UpdatePackButton" Content="更新包" Click="UpdatePack_Click" Padding="10,3"
+                                <TextBox x:Name="NewInstanceName" Height="28" Margin="0,0,0,8" ToolTip="留空则自动用版本名"/>
+                                <WrapPanel Margin="0,0,0,8">
+                                    <Button Content="新建" Click="CreateInstance_Click" Padding="14,4" Margin="0,0,8,0"/>
+                                    <Button Content="删除" Click="DeleteInstance_Click" Padding="14,4" Margin="0,0,8,0"/>
+                                    <Button Content="导入" Click="ImportPack_Click" Padding="14,4" Margin="0,0,8,0"/>
+                                    <Button x:Name="UpdatePackButton" Content="更新包" Click="UpdatePack_Click" Padding="14,4"
                                             ToolTip="只有用「导入」创建的整合包实例才能更新"/>
                                 </WrapPanel>
                             </StackPanel>
-                            <ListBox x:Name="InstancesList" Margin="0,8,0,0"
-                                     SelectionChanged="Instances_SelectionChanged" DisplayMemberPath="Name"/>
-                        </DockPanel>
-                    </GroupBox>
-
-                    <TextBox Grid.Column="1" x:Name="LogBox" IsReadOnly="True"
-                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
-                             FontFamily="Consolas" FontSize="12" TextWrapping="NoWrap"/>
-
-                    <GroupBox Grid.Column="2" Header="Mods" Margin="12,0,0,0">
-                        <DockPanel>
-                            <StackPanel DockPanel.Dock="Top">
-                                <TextBox x:Name="ModSearch" Height="24" Margin="0,0,0,6" TextChanged="ModSearch_Changed"
-                                         ToolTip="按名字 / 文件名 / mod id 过滤"/>
-                                <ComboBox x:Name="ModSort" Height="24" Margin="0,0,0,6" SelectedIndex="0"
-                                          SelectionChanged="ModSort_Changed">
-                                    <ComboBoxItem Content="按名字排序"/>
-                                    <ComboBoxItem Content="按文件名排序"/>
-                                    <ComboBoxItem Content="启用的在前"/>
-                                </ComboBox>
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                    <Button Content="刷新" Click="RefreshMods_Click" Padding="10,3"/>
-                                    <Button Content="添加" Click="AddMod_Click" Padding="10,3" Margin="8,0,0,0"/>
-                                    <Button Content="删除" Click="RemoveMod_Click" Padding="10,3" Margin="8,0,0,0"/>
-                                    <Button Content="检查更新" Click="CheckUpdates_Click" Padding="10,3" Margin="8,0,0,0"/>
-                                    <Button Content="OptiFabric" Click="InstallOptiFabric_Click" Padding="10,3" Margin="8,0,0,0"/>
-                                </StackPanel>
-                                <TextBlock x:Name="ModsPathText" Foreground="Gray" FontSize="11"
-                                           Margin="0,0,0,8" TextTrimming="CharacterEllipsis"/>
-                            </StackPanel>
-
-                            <ListView x:Name="ModsList" BorderThickness="0">
-                                <ListView.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal">
-                                            <CheckBox IsChecked="{Binding Enabled, Mode=OneTime}"
-                                                      Click="ModCheck_Click" VerticalAlignment="Center"/>
-                                            <TextBlock Text="{Binding DisplayName}" Width="150" Margin="6,0,0,0"
-                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock Text="{Binding Version}" Width="70" Foreground="Gray"
-                                                       VerticalAlignment="Center"/>
-                                            <TextBlock Text="{Binding FileName}" Foreground="#999"
-                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ListView.ItemTemplate>
-                            </ListView>
+                            <ListBox x:Name="InstancesList" SelectionChanged="Instances_SelectionChanged" DisplayMemberPath="Name"/>
                         </DockPanel>
                     </GroupBox>
                 </Grid>
+
+                <Grid x:Name="ResourceView" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0">
+                        <TextBlock Text="资源" FontSize="24" FontWeight="Bold"/>
+                        <TextBlock Text="当前实例的 mods 列表" Foreground="#888" Margin="0,4,0,0"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" Margin="0,16,0,8">
+                        <TextBox x:Name="ModSearch" Height="28" Margin="0,0,0,6" TextChanged="ModSearch_Changed"
+                                 ToolTip="按名字 / 文件名 / mod id 过滤"/>
+                        <ComboBox x:Name="ModSort" Height="26" Margin="0,0,0,6" SelectedIndex="0"
+                                  SelectionChanged="ModSort_Changed">
+                            <ComboBoxItem Content="按名字排序"/>
+                            <ComboBoxItem Content="按文件名排序"/>
+                            <ComboBoxItem Content="启用的在前"/>
+                        </ComboBox>
+                        <WrapPanel>
+                            <Button Content="刷新" Click="RefreshMods_Click" Padding="10,3" Margin="0,0,8,0"/>
+                            <Button Content="添加" Click="AddMod_Click" Padding="10,3" Margin="0,0,8,0"/>
+                            <Button Content="删除" Click="RemoveMod_Click" Padding="10,3" Margin="0,0,8,0"/>
+                            <Button Content="检查更新" Click="CheckUpdates_Click" Padding="10,3" Margin="0,0,8,0"/>
+                            <Button Content="OptiFabric" Click="InstallOptiFabric_Click" Padding="10,3"/>
+                        </WrapPanel>
+                        <TextBlock x:Name="ModsPathText" Foreground="Gray" FontSize="11"
+                                   Margin="0,8,0,0" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+
+                    <ListView Grid.Row="2" x:Name="ModsList" BorderThickness="0">
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <CheckBox IsChecked="{Binding Enabled, Mode=OneTime}"
+                                              Click="ModCheck_Click" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding DisplayName}" Width="180" Margin="6,0,0,0"
+                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding Version}" Width="80" Foreground="Gray"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding FileName}" Foreground="#999"
+                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Grid>
+
+                <Grid x:Name="AccountView" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0">
+                        <TextBlock Text="账号" FontSize="24" FontWeight="Bold"/>
+                        <TextBlock Text="离线 / 外置（Yggdrasil）/ 微软正版" Foreground="#888" Margin="0,4,0,0"/>
+                    </StackPanel>
+
+                    <Border Grid.Row="1" Background="#F7F7F7" CornerRadius="6" Padding="16" Margin="0,16,0,0">
+                        <StackPanel>
+                            <WrapPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,16,8">
+                                    <TextBlock Text="账号" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <ComboBox x:Name="AccountBox" Width="170" VerticalAlignment="Center" DisplayMemberPath="Name"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,16,8">
+                                    <TextBlock Text="离线名" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBox x:Name="NameBox" Width="100" VerticalAlignment="Center"/>
+                                    <Button Content="添加" Margin="8,0,0,0" Padding="10,3" Click="AddAccount_Click"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <Button Content="登录" Padding="10,3" Click="Login_Click"/>
+                                    <Button Content="正版登录" Margin="8,0,0,0" Padding="10,3" Click="MicrosoftLogin_Click"/>
+                                    <Button Content="切换角色" Margin="8,0,0,0" Padding="10,3" Click="SwitchRole_Click"/>
+                                </StackPanel>
+                            </WrapPanel>
+                            <TextBlock Text="正版登录使用微软 device code；外置登录使用 LittleSkin 等 Yggdrasil 站点。" Foreground="#888" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <Grid x:Name="SettingsView" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0">
+                        <TextBlock Text="设置" FontSize="24" FontWeight="Bold"/>
+                        <TextBlock Text="内存 / Java / 下载源 / 启动器更新" Foreground="#888" Margin="0,4,0,0"/>
+                    </StackPanel>
+
+                    <Border Grid.Row="1" Background="#F7F7F7" CornerRadius="6" Padding="16" Margin="0,16,0,0">
+                        <StackPanel>
+                            <TextBlock x:Name="SettingsSummaryText" FontSize="14" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="DataDirText" Foreground="#888" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                            <Button Content="打开设置…" Margin="0,14,0,0" Padding="14,5" HorizontalAlignment="Left"
+                                    Click="Settings_Click"/>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Grid.Row="2" Foreground="#888" TextWrapping="Wrap" Margin="0,14,0,0"
+                               Text="自更新的「检查更新」在设置窗口里；发布版才会真正替换文件。"/>
+                </Grid>
+
+                <Grid x:Name="LogView" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0">
+                        <TextBlock Text="日志" FontSize="24" FontWeight="Bold"/>
+                        <TextBlock Text="启动器日志；底部可复制失败清单/打开日志目录/校验文件" Foreground="#888" Margin="0,4,0,0"/>
+                    </StackPanel>
+
+                    <TextBox Grid.Row="1" x:Name="LogBox" IsReadOnly="True" Margin="0,16,0,0"
+                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                             FontFamily="Consolas" FontSize="12" TextWrapping="NoWrap"/>
+                </Grid>
             </Grid>
 
-            <Grid x:Name="HomeView" Visibility="Collapsed">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <StackPanel Grid.Row="0">
-                    <TextBlock Text="首页" FontSize="24" FontWeight="Bold"/>
-                    <TextBlock Text="选一个实例，然后启动" Foreground="#888" Margin="0,4,0,0"/>
-                </StackPanel>
-
-                <Border Grid.Row="1" Background="#F7F7F7" CornerRadius="6" Padding="16" Margin="0,16,0,0">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0">
-                            <TextBlock Text="实例" Foreground="#888" FontSize="11"/>
-                            <TextBlock Text="{Binding SelectedItem.Name, ElementName=InstancesList}" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
-                        <StackPanel Grid.Column="1">
-                            <TextBlock Text="版本" Foreground="#888" FontSize="11"/>
-                            <TextBlock Text="{Binding SelectedItem.Id, ElementName=VersionBox}" FontSize="16"/>
-                        </StackPanel>
-                        <StackPanel Grid.Column="2">
-                            <TextBlock Text="加载器" Foreground="#888" FontSize="11"/>
-                            <TextBlock Text="{Binding SelectedItem.Content, ElementName=LoaderBox}" FontSize="16"/>
-                        </StackPanel>
-                        <StackPanel Grid.Column="3">
-                            <TextBlock Text="账号" Foreground="#888" FontSize="11"/>
-                            <TextBlock Text="{Binding SelectedItem.Name, ElementName=AccountBox}" FontSize="16"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
-                <GroupBox Grid.Row="2" Header="实例" Margin="0,16,0,0">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <ItemsControl x:Name="HomeInstances">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <WrapPanel/>
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Button Tag="{Binding}" Click="HomeInstance_Click" Width="180" Height="72"
-                                            Margin="0,0,10,10" Padding="12,8" HorizontalContentAlignment="Stretch">
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock Text="{Binding VersionId}" Foreground="#888" FontSize="11" Margin="0,4,0,0"/>
-                                            <TextBlock Text="{Binding Loader}" Foreground="#888" FontSize="11"/>
-                                        </StackPanel>
-                                    </Button>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </GroupBox>
-
-                <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,16,0,0">
-                    <Button Content="{Binding Content, ElementName=LaunchButton}"
-                            IsEnabled="{Binding IsEnabled, ElementName=LaunchButton}"
-                            Click="Launch_Click" Padding="24,8" FontSize="15"/>
-                    <ProgressBar Value="{Binding Value, ElementName=Progress}"
-                                 Maximum="{Binding Maximum, ElementName=Progress}"
-                                 Width="240" Height="18" Margin="16,0,0,0" VerticalAlignment="Center"/>
-                    <TextBlock Text="{Binding Text, ElementName=StatusText}" Margin="12,0,0,0"
-                               VerticalAlignment="Center" Foreground="Gray" TextTrimming="CharacterEllipsis"/>
-                </StackPanel>
-            </Grid>
+            <WrapPanel Grid.Row="1" Margin="0,12,0,0">
+                <Button x:Name="LaunchButton" Content="启动游戏" Padding="22,6" Margin="0,0,12,6" Click="Launch_Click"/>
+                <ProgressBar x:Name="Progress" Width="240" Height="18" Margin="0,0,12,6" VerticalAlignment="Center"/>
+                <TextBlock x:Name="StatusText" Margin="0,0,12,6" VerticalAlignment="Center" Foreground="Gray"/>
+                <Button x:Name="CopyFailuresButton" Content="复制失败清单" Padding="10,3" Margin="0,0,8,6"
+                        IsEnabled="False" Click="CopyFailures_Click"/>
+                <Button Content="打开日志" Padding="10,3" Margin="0,0,8,6" Click="OpenLogs_Click"/>
+                <Button x:Name="RepairButton" Content="校验/修复" Padding="10,3" Margin="0,0,0,6"
+                        Click="Repair_Click" ToolTip="按 sha1 重新检查并补齐当前版本/实例的文件"/>
+            </WrapPanel>
         </Grid>
     </Grid>
 </Window>

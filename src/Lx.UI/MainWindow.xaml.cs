@@ -121,6 +121,7 @@ public partial class MainWindow : Window
             Log($"下载源：{DownloadUrlRewriter.Describe(source)}");
             Log($"版本清单：{versions.Count} 个");
             Log($"日志：{LxLog.CurrentFile ?? LxLog.DirectoryPath}");
+            RefreshSettingsSummary();
         }
         catch (Exception ex)
         {
@@ -164,22 +165,34 @@ public partial class MainWindow : Window
         }
     }
 
-    private void Home_Click(object sender, RoutedEventArgs e)
+    private void Home_Click(object sender, RoutedEventArgs e) => ShowPage(HomeView);
+
+    private void VersionPage_Click(object sender, RoutedEventArgs e) => ShowPage(VersionView);
+
+    private void InstancePage_Click(object sender, RoutedEventArgs e) => ShowPage(InstanceView);
+
+    private void ResourcePage_Click(object sender, RoutedEventArgs e) => ShowPage(ResourceView);
+
+    private void AccountPage_Click(object sender, RoutedEventArgs e) => ShowPage(AccountView);
+
+    private void SettingsPage_Click(object sender, RoutedEventArgs e)
     {
-        HomeView.Visibility = Visibility.Visible;
-        ManageView.Visibility = Visibility.Collapsed;
+        RefreshSettingsSummary();
+        ShowPage(SettingsView);
     }
 
-    private void Manage_Click(object sender, RoutedEventArgs e)
+    private void LogPage_Click(object sender, RoutedEventArgs e)
     {
-        HomeView.Visibility = Visibility.Collapsed;
-        ManageView.Visibility = Visibility.Visible;
-    }
-
-    private void ShowLogs_Click(object sender, RoutedEventArgs e)
-    {
-        Manage_Click(sender, e);
+        ShowPage(LogView);
         LogBox.ScrollToEnd();
+    }
+
+    private void ShowPage(Grid page)
+    {
+        foreach (Grid view in new[] { HomeView, VersionView, InstanceView, ResourceView, AccountView, SettingsView, LogView })
+        {
+            view.Visibility = ReferenceEquals(view, page) ? Visibility.Visible : Visibility.Collapsed;
+        }
     }
 
     private void HomeInstance_Click(object sender, RoutedEventArgs e)
@@ -200,6 +213,20 @@ public partial class MainWindow : Window
             var source = new DownloadSourceSettings(settings.DownloadSource, settings.CustomDownloadBase);
             Log($"设置已保存：内存 {settings.MinMemoryMb}-{settings.MaxMemoryMb} MB，Java {(settings.JavaPath ?? "自动")}，下载源 {DownloadUrlRewriter.Describe(source)}");
         }
+
+        RefreshSettingsSummary();
+    }
+
+    private void RefreshSettingsSummary()
+    {
+        LaunchSettings settings = SettingsStore.Load(_installRoot);
+        var source = new DownloadSourceSettings(settings.DownloadSource, settings.CustomDownloadBase);
+        SettingsSummaryText.Text =
+            $"启动器版本：v{AppInfo.Version}{Environment.NewLine}" +
+            $"内存：{settings.MinMemoryMb}–{settings.MaxMemoryMb} MB{Environment.NewLine}" +
+            $"Java：{settings.JavaPath ?? "自动"}{Environment.NewLine}" +
+            $"下载源：{DownloadUrlRewriter.Describe(source)}";
+        DataDirText.Text = $"数据目录：{_installRoot}";
     }
 
     private async void SwitchRole_Click(object sender, RoutedEventArgs e)
