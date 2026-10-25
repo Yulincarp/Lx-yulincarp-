@@ -785,6 +785,8 @@ public partial class MainWindow : Window
         {
             Arguments = arguments,
             UseShellExecute = false,
+            // 不建控制台窗口：否则用户关掉黑框会向 java 发 CTRL_CLOSE，进程以 0xC000013A 秒退。
+            CreateNoWindow = true,
             WorkingDirectory = result.GameDir,
         };
 
