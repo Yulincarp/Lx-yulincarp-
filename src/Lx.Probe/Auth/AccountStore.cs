@@ -50,14 +50,31 @@ public static class AccountStore
             string token = account.AccessToken ?? string.Empty;
             if (IsProtected(token))
             {
-                token = Unprotect(token, account.Name);
+                token = Unprotect(token, account.Name, "AccessToken");
             }
             else if (token.Length > 0)
             {
                 needsMigration = true;
             }
 
-            result.Add(account with { AccessToken = token });
+            string? refresh = account.RefreshToken;
+            if (!string.IsNullOrEmpty(refresh))
+            {
+                if (IsProtected(refresh))
+                {
+                    refresh = Unprotect(refresh, account.Name, "RefreshToken");
+                    if (refresh.Length == 0)
+                    {
+                        refresh = null;
+                    }
+                }
+                else
+                {
+                    needsMigration = true;
+                }
+            }
+
+            result.Add(account with { AccessToken = token, RefreshToken = refresh });
         }
 
         if (needsMigration && OperatingSystem.IsWindows())
@@ -89,7 +106,13 @@ public static class AccountStore
         Directory.CreateDirectory(installRoot);
 
         List<Account> stored = accounts
-            .Select(account => account with { AccessToken = Protect(account.AccessToken ?? string.Empty) })
+            .Select(account => account with
+            {
+                AccessToken = Protect(account.AccessToken ?? string.Empty),
+                RefreshToken = string.IsNullOrEmpty(account.RefreshToken)
+                    ? account.RefreshToken
+                    : Protect(account.RefreshToken),
+            })
             .ToList();
 
         string path = PathFor(installRoot);
@@ -153,7 +176,7 @@ public static class AccountStore
         }
     }
 
-    private static string Unprotect(string stored, string accountName)
+    private static string Unprotect(string stored, string accountName, string fieldName)
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -168,7 +191,7 @@ public static class AccountStore
         }
         catch (Exception ex) when (ex is CryptographicException or FormatException)
         {
-            Log.Warn($"账号 {accountName} 的 AccessToken 无法解密（换了 Windows 用户/机器？），需要重新登录");
+            Log.Warn($"账号 {accountName} 的 {fieldName} 无法解密（换了 Windows 用户/机器？），需要重新登录");
             return string.Empty;
         }
     }

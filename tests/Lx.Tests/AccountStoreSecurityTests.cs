@@ -6,22 +6,30 @@ namespace Lx.Tests;
 public class AccountStoreSecurityTests
 {
     [Fact]
-    public void Save_EncryptsTokenAtRest()
+    public void Save_EncryptsTokensAtRest()
     {
         string root = NewDir();
         try
         {
             AccountStore.Save(root, new Account(
-                "yggdrasil",
+                "microsoft",
                 "Alice",
                 "uuid",
-                "plain-secret",
-                "https://example.com"));
+                "plain-access",
+                null,
+                RefreshToken: "plain-refresh",
+                ExpiresAt: DateTimeOffset.UtcNow.AddHours(1),
+                ClientId: "client-id"));
 
             string raw = File.ReadAllText(AccountStore.PathFor(root));
-            Assert.DoesNotContain("plain-secret", raw);
+            Assert.DoesNotContain("plain-access", raw);
+            Assert.DoesNotContain("plain-refresh", raw);
             Assert.Contains("dpapi:", raw);
-            Assert.Equal("plain-secret", Assert.Single(AccountStore.Load(root)).AccessToken);
+
+            Account loaded = Assert.Single(AccountStore.Load(root));
+            Assert.Equal("plain-access", loaded.AccessToken);
+            Assert.Equal("plain-refresh", loaded.RefreshToken);
+            Assert.Equal("client-id", loaded.ClientId);
         }
         finally
         {
@@ -40,25 +48,31 @@ public class AccountStoreSecurityTests
             File.WriteAllText(path, """
             [
               {
-                "Type": "yggdrasil",
+                "Type": "microsoft",
                 "Name": "Alice",
                 "Uuid": "uuid",
-                "AccessToken": "plain-secret",
-                "ApiRoot": "https://example.com",
-                "AvailableRoles": []
+                "AccessToken": "plain-access",
+                "ApiRoot": null,
+                "RefreshToken": "plain-refresh",
+                "ClientId": "client-id"
               }
             ]
             """);
 
             List<Account> accounts = AccountStore.Load(root);
-            Assert.Equal("plain-secret", Assert.Single(accounts).AccessToken);
+            Account loaded = Assert.Single(accounts);
+            Assert.Equal("plain-access", loaded.AccessToken);
+            Assert.Equal("plain-refresh", loaded.RefreshToken);
 
             string raw = File.ReadAllText(path);
-            Assert.DoesNotContain("plain-secret", raw);
+            Assert.DoesNotContain("plain-access", raw);
+            Assert.DoesNotContain("plain-refresh", raw);
 
             string backup = path + ".bak";
             Assert.True(File.Exists(backup));
-            Assert.DoesNotContain("plain-secret", File.ReadAllText(backup));
+            string backupText = File.ReadAllText(backup);
+            Assert.DoesNotContain("plain-access", backupText);
+            Assert.DoesNotContain("plain-refresh", backupText);
         }
         finally
         {
@@ -79,13 +93,15 @@ public class AccountStoreSecurityTests
                 "Type": "microsoft",
                 "Name": "Bob",
                 "Uuid": "uuid",
-                "AccessToken": "dpapi:not-base64"
+                "AccessToken": "dpapi:not-base64",
+                "RefreshToken": "dpapi:also-not-base64"
               }
             ]
             """);
 
             Account account = Assert.Single(AccountStore.Load(root));
             Assert.Equal(string.Empty, account.AccessToken);
+            Assert.Null(account.RefreshToken);
         }
         finally
         {
@@ -110,4 +126,46 @@ public class AccountStoreSecurityTests
             // 临时目录清不掉不影响测试结果
         }
     }
+}
+
+public class MicrosoftRefreshPolicyTests
+{
+    [Fact]
+    public void NeedsRefresh_ExpiredOrNearExpiry_ReturnsTrue()
+    {
+        Account account = MicrosoftAccount(DateTimeOffset.UtcNow.AddMinutes(-1));
+        Assert.True(MicrosoftAuth.NeedsRefresh(account));
+        Assert.True(MicrosoftAuth.IsExpired(account));
+    }
+
+    [Fact]
+    public void NeedsRefresh_FreshToken_ReturnsFalse()
+    {
+        Account account = MicrosoftAccount(DateTimeOffset.UtcNow.AddHours(1));
+        Assert.False(MicrosoftAuth.NeedsRefresh(account));
+        Assert.False(MicrosoftAuth.IsExpired(account));
+    }
+
+    [Fact]
+    public void NeedsRefresh_WithoutRefreshToken_ReturnsFalse()
+    {
+        Account account = MicrosoftAccount(DateTimeOffset.UtcNow.AddMinutes(-1)) with
+        {
+            RefreshToken = null,
+            ClientId = null,
+        };
+
+        Assert.False(MicrosoftAuth.NeedsRefresh(account));
+        Assert.True(MicrosoftAuth.IsExpired(account));
+    }
+
+    private static Account MicrosoftAccount(DateTimeOffset expiresAt) => new(
+        "microsoft",
+        "Alice",
+        "uuid",
+        "mc-token",
+        null,
+        RefreshToken: "refresh-token",
+        ExpiresAt: expiresAt,
+        ClientId: "client-id");
 }

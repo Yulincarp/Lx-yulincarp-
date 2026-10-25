@@ -851,11 +851,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (AccountBox.SelectedItem is not Account account)
+        if (AccountBox.SelectedItem is not Account selectedAccount)
         {
             Log("先选一个账号（或添加一个离线账号）");
             return;
         }
+
+        // 从磁盘重新读一次：微软账号可能在别的会话里续过期，界面里的对象是旧的。
+        Account account = AccountStore.FindByName(_installRoot, selectedAccount.Name) ?? selectedAccount;
 
         if (VersionBox.SelectedItem is not ManifestVersion version || version.Id is null)
         {

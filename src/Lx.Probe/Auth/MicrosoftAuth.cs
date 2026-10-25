@@ -29,14 +29,97 @@ public static class MicrosoftAuth
         say($"2) 输入代码：{device.UserCode}");
         say("（授权完成后自动继续）");
 
-        string msToken = await PollForTokenAsync(clientId, device);
+        TokenResponse msToken = await PollForTokenAsync(clientId, device);
 
-        XboxTokens xbl = await XboxLiveAsync(msToken);
+        XboxTokens xbl = await XboxLiveAsync(msToken.AccessToken!);
         XboxTokens xsts = await XstsAsync(xbl.Token, xbl.Uhs);
-        string mcToken = await MinecraftLoginAsync(xsts.Uhs, xsts.Token);
+        (string mcToken, int expiresIn) = await MinecraftLoginAsync(xsts.Uhs, xsts.Token);
         (string id, string name) = await MinecraftProfileAsync(mcToken);
 
-        return new Account("microsoft", name, id, mcToken, null);
+        return new Account(
+            "microsoft",
+            name,
+            id,
+            mcToken,
+            null,
+            RefreshToken: msToken.RefreshToken,
+            ExpiresAt: DateTimeOffset.UtcNow.AddSeconds(Math.Max(expiresIn, 60)),
+            ClientId: clientId);
+    }
+
+    // 有 refresh token 且快到期的账号，启动前静默续期。
+    public static bool NeedsRefresh(Account account)
+    {
+        if (account.Type != "microsoft" ||
+            string.IsNullOrEmpty(account.RefreshToken) ||
+            string.IsNullOrEmpty(account.ClientId))
+        {
+            return false;
+        }
+
+        return account.ExpiresAt is null || account.ExpiresAt <= DateTimeOffset.UtcNow.AddMinutes(5);
+    }
+
+    public static bool IsExpired(Account account) =>
+        account.Type == "microsoft" &&
+        account.ExpiresAt is { } expiry &&
+        expiry <= DateTimeOffset.UtcNow;
+
+    // 用 refresh_token 换新的微软 token，再走一遍 XBL/XSTS/Minecraft 换 mcToken。
+    public static async Task<Account> RefreshAsync(Account account, Action<string>? log = null)
+    {
+        if (account.Type != "microsoft")
+        {
+            throw new InvalidOperationException("只有微软账号需要续期");
+        }
+
+        if (string.IsNullOrEmpty(account.RefreshToken))
+        {
+            throw new InvalidOperationException("没有保存 refresh token，请重新登录");
+        }
+
+        if (string.IsNullOrEmpty(account.ClientId))
+        {
+            throw new InvalidOperationException("没有保存 client id，请重新登录");
+        }
+
+        var form = new Dictionary<string, string>
+        {
+            ["grant_type"] = "refresh_token",
+            ["client_id"] = account.ClientId,
+            ["refresh_token"] = account.RefreshToken,
+            ["scope"] = "XboxLive.signin offline_access",
+        };
+
+        (HttpStatusCode status, string body) = await PostFormAsync(TokenUrl, form);
+        if (status != HttpStatusCode.OK)
+        {
+            TokenError? error = TryParse<TokenError>(body);
+            if (error?.Error == "invalid_grant")
+            {
+                throw new InvalidOperationException("微软登录已过期（refresh token 失效），请重新登录");
+            }
+
+            throw new InvalidOperationException($"刷新微软 token 失败（{(int)status}）：{error?.ErrorDescription ?? body}");
+        }
+
+        TokenResponse? token = JsonSerializer.Deserialize<TokenResponse>(body, Json);
+        if (token?.AccessToken is null)
+        {
+            throw new InvalidOperationException("刷新响应里没有 access_token");
+        }
+
+        log?.Invoke("微软 token 已刷新，正在重新获取 Minecraft 凭据…");
+        XboxTokens xbl = await XboxLiveAsync(token.AccessToken);
+        XboxTokens xsts = await XstsAsync(xbl.Token, xbl.Uhs);
+        (string mcToken, int expiresIn) = await MinecraftLoginAsync(xsts.Uhs, xsts.Token);
+
+        return account with
+        {
+            AccessToken = mcToken,
+            RefreshToken = token.RefreshToken ?? account.RefreshToken,
+            ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(Math.Max(expiresIn, 60)),
+        };
     }
 
     private static async Task<DeviceCodeResponse> RequestDeviceCodeAsync(string clientId)
@@ -57,7 +140,7 @@ public static class MicrosoftAuth
                ?? throw new InvalidOperationException("device code 响应解析失败");
     }
 
-    private static async Task<string> PollForTokenAsync(string clientId, DeviceCodeResponse device)
+    private static async Task<TokenResponse> PollForTokenAsync(string clientId, DeviceCodeResponse device)
     {
         if (device.DeviceCode is null)
         {
@@ -84,7 +167,7 @@ public static class MicrosoftAuth
                 TokenResponse? token = JsonSerializer.Deserialize<TokenResponse>(body, Json);
                 if (token?.AccessToken is not null)
                 {
-                    return token.AccessToken;
+                    return token;
                 }
             }
 
@@ -182,7 +265,7 @@ public static class MicrosoftAuth
         };
     }
 
-    private static async Task<string> MinecraftLoginAsync(string uhs, string xstsToken)
+    private static async Task<(string Token, int ExpiresIn)> MinecraftLoginAsync(string uhs, string xstsToken)
     {
         var payload = new { identityToken = $"XBL3.0 x={uhs};{xstsToken}" };
 
@@ -193,8 +276,12 @@ public static class MicrosoftAuth
         }
 
         TokenResponse? token = JsonSerializer.Deserialize<TokenResponse>(body, Json);
-        return token?.AccessToken
-               ?? throw new InvalidOperationException("Minecraft 登录响应里没有 access_token");
+        if (token?.AccessToken is null)
+        {
+            throw new InvalidOperationException("Minecraft 登录响应里没有 access_token");
+        }
+
+        return (token.AccessToken, Math.Max(token.ExpiresIn, 60));
     }
 
     private static async Task<(string Id, string Name)> MinecraftProfileAsync(string mcToken)
@@ -266,6 +353,7 @@ public static class MicrosoftAuth
     {
         public string? AccessToken { get; set; }
         public string? RefreshToken { get; set; }
+        public int ExpiresIn { get; set; }
     }
 
     private sealed class TokenError

@@ -8,6 +8,9 @@ public sealed record Account(
     string Uuid,
     string AccessToken,
     string? ApiRoot,
-    List<AccountRole>? AvailableRoles = null);
+    List<AccountRole>? AvailableRoles = null,
+    string? RefreshToken = null,
+    DateTimeOffset? ExpiresAt = null,
+    string? ClientId = null);
 
 public sealed record AccountRole(string Id, string Name);

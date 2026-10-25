@@ -41,13 +41,36 @@ public static class LaunchPipeline
         Action<DownloadFailure>? onDownloadFailure = null,
         CancellationToken cancellationToken = default)
     {
-        if (!string.Equals(options.Account.Type, "offline", StringComparison.OrdinalIgnoreCase) &&
-            string.IsNullOrEmpty(options.Account.AccessToken))
+        string installRoot = options.InstallRoot;
+        Account account = options.Account;
+
+        if (MicrosoftAuth.NeedsRefresh(account))
+        {
+            log("微软登录凭据即将过期，正在自动续期…");
+            account = await MicrosoftAuth.RefreshAsync(account, log).ConfigureAwait(false);
+
+            try
+            {
+                AccountStore.Save(installRoot, account);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                log($"[警告] 续期成功，但保存账号失败：{ex.Message}");
+            }
+
+            log("微软凭据已续期");
+        }
+        else if (MicrosoftAuth.IsExpired(account))
+        {
+            throw new InvalidOperationException("微软登录已过期，请重新登录");
+        }
+
+        if (!string.Equals(account.Type, "offline", StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrEmpty(account.AccessToken))
         {
             throw new InvalidOperationException("账号凭据无法解密（可能换了 Windows 用户或机器），请在启动器里重新登录");
         }
 
-        string installRoot = options.InstallRoot;
         LaunchSettings settings = SettingsStore.Load(installRoot);
         var source = new DownloadSourceSettings(settings.DownloadSource, settings.CustomDownloadBase);
         Func<string, string> rewriteUrl = url => DownloadUrlRewriter.Rewrite(url, source);
@@ -169,14 +192,14 @@ public static class LaunchPipeline
 
         var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["auth_player_name"] = options.Account.Name,
+            ["auth_player_name"] = account.Name,
             ["version_name"] = versionId,
             ["game_directory"] = gameRoot,
             ["assets_root"] = assetsDir,
             ["assets_index_name"] = version.Assets ?? "12",
-            ["auth_uuid"] = options.Account.Uuid,
-            ["auth_access_token"] = options.Account.AccessToken,
-            ["user_type"] = options.Account.Type switch
+            ["auth_uuid"] = account.Uuid,
+            ["auth_access_token"] = account.AccessToken,
+            ["user_type"] = account.Type switch
             {
                 "microsoft" => "msa",
                 "yggdrasil" => "mojang",
@@ -218,7 +241,7 @@ public static class LaunchPipeline
                 log($"ignoreList 追加 {clientFileName}");
             }
         }
-        if (options.Account.Type == "yggdrasil")
+        if (account.Type == "yggdrasil")
         {
             string injector = Path.Combine(installRoot, "authlib-injector.jar");
             if (!File.Exists(injector))
@@ -226,7 +249,7 @@ public static class LaunchPipeline
                 throw new InvalidOperationException($"缺少 {injector}");
             }
 
-            jvmArgs.Insert(0, $"-javaagent:{injector}={options.Account.ApiRoot}");
+            jvmArgs.Insert(0, $"-javaagent:{injector}={account.ApiRoot}");
         }
 
         List<string> gameArgs = ArgumentExpander.Expand(version.Arguments?.Game, values, features);
