@@ -37,7 +37,7 @@
 
         <Grid Grid.Row="2" Margin="0,12,0,0">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="210"/>
+                <ColumnDefinition Width="260"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="430"/>
             </Grid.ColumnDefinitions>
@@ -46,13 +46,13 @@
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Top">
                         <TextBox x:Name="NewInstanceName" Height="24" Margin="0,0,0,6"/>
-                        <StackPanel Orientation="Horizontal">
-                            <Button Content="新建" Click="CreateInstance_Click" Padding="12,3"/>
-                            <Button Content="删除" Click="DeleteInstance_Click" Padding="12,3" Margin="8,0,0,0"/>
-                            <Button Content="导入" Click="ImportPack_Click" Padding="12,3" Margin="8,0,0,0"/>
-                            <Button x:Name="UpdatePackButton" Content="更新包" Click="UpdatePack_Click" Padding="12,3" Margin="8,0,0,0"
+                        <WrapPanel>
+                            <Button Content="新建" Click="CreateInstance_Click" Padding="10,3" Margin="0,0,6,0"/>
+                            <Button Content="删除" Click="DeleteInstance_Click" Padding="10,3" Margin="0,0,6,0"/>
+                            <Button Content="导入" Click="ImportPack_Click" Padding="10,3" Margin="0,0,6,0"/>
+                            <Button x:Name="UpdatePackButton" Content="更新包" Click="UpdatePack_Click" Padding="10,3"
                                     ToolTip="只有用「导入」创建的整合包实例才能更新"/>
-                        </StackPanel>
+                        </WrapPanel>
                     </StackPanel>
                     <ListBox x:Name="InstancesList" Margin="0,8,0,0"
                              SelectionChanged="Instances_SelectionChanged" DisplayMemberPath="Name"/>
