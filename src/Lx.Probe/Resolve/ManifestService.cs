@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Lx.Probe.Model;
+using Lx.Probe.Net;
 
 namespace Lx.Probe.Resolve;
 
@@ -19,7 +20,7 @@ public static class ManifestService
         if (!File.Exists(path))
         {
             Directory.CreateDirectory(installRoot);
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+            HttpClient http = ProxyConfig.GetClient(TimeSpan.FromSeconds(60), AppInfo.UserAgent);
             string url = rewriteUrl?.Invoke(ManifestUrl) ?? ManifestUrl;
             string json = await http.GetStringAsync(url, cancellationToken).ConfigureAwait(false);
             string temp = path + ".part";
@@ -98,7 +99,7 @@ public static class ManifestService
         }
 
         Directory.CreateDirectory(dir);
-        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+        HttpClient http = ProxyConfig.GetClient(TimeSpan.FromSeconds(60), AppInfo.UserAgent);
         string url = rewriteUrl?.Invoke(entry.Url) ?? entry.Url;
         string json = await http.GetStringAsync(url, cancellationToken).ConfigureAwait(false);
         string temp = path + ".part";

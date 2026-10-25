@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Lx.Probe.Model;
+using Lx.Probe.Net;
 
 namespace Lx.Probe.Auth;
 
@@ -16,7 +17,7 @@ public static class MicrosoftAuth
     private const string McLoginUrl = "https://api.minecraftservices.com/authentication/login_with_xbox";
     private const string McProfileUrl = "https://api.minecraftservices.com/minecraft/profile";
 
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(60) };
+    private static HttpClient Http => ProxyConfig.GetClient(TimeSpan.FromSeconds(60), AppInfo.UserAgent);
 
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Lx.Probe.Net;
 using Lx.Probe.Resolve;
 
 namespace Lx.Probe.Mods;
@@ -47,14 +48,8 @@ public static class ModrinthClient
 {
     private const string Base = "https://api.modrinth.com/v2";
 
-    private static readonly HttpClient Http = CreateHttp();
-
-    private static HttpClient CreateHttp()
-    {
-        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd(AppInfo.UserAgent + " (local test)");
-        return client;
-    }
+    private static HttpClient Http =>
+        ProxyConfig.GetClient(TimeSpan.FromSeconds(30), AppInfo.UserAgent + " (local test)");
 
     // 查不到（不在 Modrinth 上）返回 null。
     public static async Task<ModUpdate?> CheckAsync(string jarPath, string gameVersion, string loader = "fabric")

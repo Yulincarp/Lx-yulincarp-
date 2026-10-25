@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Lx.Probe.Net;
 using Lx.Probe.Resolve;
 
 namespace Lx.Probe.Launch;
@@ -11,12 +12,7 @@ public static class JavaRuntime
     private const string AllRuntimesUrl =
         "https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json";
 
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(10) };
-
-    static JavaRuntime()
-    {
-        Http.DefaultRequestHeaders.UserAgent.ParseAdd(AppInfo.UserAgent);
-    }
+    private static HttpClient Http => ProxyConfig.GetClient(TimeSpan.FromMinutes(10), AppInfo.UserAgent);
 
     public static async Task<string> EnsureJavaAsync(
         string installRoot,

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Lx.Probe.Net;
 
 namespace Lx.Probe.Resolve;
 
@@ -10,61 +11,10 @@ public sealed record DownloadFailure(string Url, string RelativePath, int? Statu
 // M2 Step 5：并发下载 + 失败重试 + 进度。仍然是"sha1 对得上就跳过"。
 public static class Downloader
 {
-    // HttpClient 只建一个：它内部管连接池，每个文件 new 一个会耗尽端口。
-    // 代理设置变化时整体重建；只在启动/保存设置时调用，不在下载过程中切换。
-    private static readonly object HttpGate = new();
-    private static HttpClient Http = CreateHttp("system", null);
-    private static string _proxyMode = "system";
-    private static string? _proxyUrl;
+    // 所有客户端统一走 ProxyConfig；这里只保留一个转发入口给设置页。
+    private static HttpClient Http => ProxyConfig.GetClient(TimeSpan.FromSeconds(120));
 
-    public static void ConfigureProxy(string? mode, string? url)
-    {
-        string normalized = mode?.ToLowerInvariant() switch
-        {
-            "none" or "direct" => "none",
-            "manual" => "manual",
-            _ => "system",
-        };
-        string? trimmed = string.IsNullOrWhiteSpace(url) ? null : url.Trim();
-
-        if (normalized == "manual" &&
-            (!Uri.TryCreate(trimmed, UriKind.Absolute, out Uri? proxyUri) ||
-             (proxyUri.Scheme != Uri.UriSchemeHttp && proxyUri.Scheme != Uri.UriSchemeHttps)))
-        {
-            normalized = "system";
-            trimmed = null;
-        }
-
-        lock (HttpGate)
-        {
-            if (normalized == _proxyMode && string.Equals(trimmed, _proxyUrl, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            HttpClient old = Http;
-            Http = CreateHttp(normalized, trimmed);
-            _proxyMode = normalized;
-            _proxyUrl = trimmed;
-            old.Dispose();
-        }
-    }
-
-    private static HttpClient CreateHttp(string mode, string? proxyUrl)
-    {
-        var handler = new SocketsHttpHandler();
-        if (mode == "none")
-        {
-            handler.UseProxy = false;
-        }
-        else if (mode == "manual" && !string.IsNullOrWhiteSpace(proxyUrl))
-        {
-            handler.Proxy = new WebProxy(proxyUrl);
-            handler.UseProxy = true;
-        }
-
-        return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(120) };
-    }
+    public static void ConfigureProxy(string? mode, string? url) => ProxyConfig.Configure(mode, url);
 
     public static async Task<int> DownloadAllAsync(
         IReadOnlyList<DownloadItem> items,

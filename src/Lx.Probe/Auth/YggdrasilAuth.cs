@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Lx.Probe.Model;
+using Lx.Probe.Net;
 
 namespace Lx.Probe.Auth;
 
@@ -17,7 +18,7 @@ public sealed class YggdrasilSessionExpiredException : InvalidOperationException
 // 外置登录（authlib-injector / Yggdrasil 协议），LittleSkin 这类站点都走这套。
 public static class YggdrasilAuth
 {
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
+    private static HttpClient Http => ProxyConfig.GetClient(TimeSpan.FromSeconds(30), AppInfo.UserAgent);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

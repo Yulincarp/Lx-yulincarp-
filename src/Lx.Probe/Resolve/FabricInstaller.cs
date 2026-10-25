@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Lx.Probe.Loaders;
+using Lx.Probe.Net;
 
 namespace Lx.Probe.Resolve;
 
@@ -18,7 +20,7 @@ public static class FabricInstaller
         string gameVersion,
         CancellationToken cancellationToken = default)
     {
-        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        HttpClient http = ProxyConfig.GetClient(TimeSpan.FromSeconds(30), AppInfo.UserAgent);
         string json = await http.GetStringAsync($"{MetaBase}/{gameVersion}", cancellationToken).ConfigureAwait(false);
 
         using JsonDocument document = JsonDocument.Parse(json);
@@ -51,38 +53,48 @@ public static class FabricInstaller
         string? loaderVersion = null,
         CancellationToken cancellationToken = default)
     {
-        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-
-        loaderVersion ??= await LatestStableLoaderAsync(http, gameVersion, cancellationToken);
-
-        string profileUrl = $"{MetaBase}/{gameVersion}/{loaderVersion}/profile/json";
-        string profileJson = await http.GetStringAsync(profileUrl, cancellationToken).ConfigureAwait(false);
-        profileJson = await FillMissingSha1Async(http, profileJson, cancellationToken).ConfigureAwait(false);
-
-        string id;
-        using (JsonDocument profile = JsonDocument.Parse(profileJson))
+        VersionTransaction transaction = VersionTransaction.Begin(installRoot);
+        try
         {
-            id = profile.RootElement.GetProperty("id").GetString()
-                 ?? throw new InvalidOperationException("Fabric profile 没有 id");
-        }
+            HttpClient http = ProxyConfig.GetClient(TimeSpan.FromSeconds(30), AppInfo.UserAgent);
 
-        string parentPath = Path.Combine(installRoot, "versions", gameVersion, gameVersion + ".json");
-        if (!File.Exists(parentPath))
+            loaderVersion ??= await LatestStableLoaderAsync(http, gameVersion, cancellationToken);
+
+            string profileUrl = $"{MetaBase}/{gameVersion}/{loaderVersion}/profile/json";
+            string profileJson = await http.GetStringAsync(profileUrl, cancellationToken).ConfigureAwait(false);
+            profileJson = await FillMissingSha1Async(http, profileJson, cancellationToken).ConfigureAwait(false);
+
+            string id;
+            using (JsonDocument profile = JsonDocument.Parse(profileJson))
+            {
+                id = profile.RootElement.GetProperty("id").GetString()
+                     ?? throw new InvalidOperationException("Fabric profile 没有 id");
+            }
+
+            string parentPath = Path.Combine(installRoot, "versions", gameVersion, gameVersion + ".json");
+            if (!File.Exists(parentPath))
+            {
+                throw new InvalidOperationException($"缺少原版 version.json：{parentPath}");
+            }
+
+            string merged = VersionMerger.Merge(File.ReadAllText(parentPath), profileJson);
+
+            string dir = Path.Combine(installRoot, "versions", id);
+            Directory.CreateDirectory(dir);
+            string path = Path.Combine(dir, id + ".json");
+            string temp = path + ".part";
+            await File.WriteAllTextAsync(temp, merged, cancellationToken).ConfigureAwait(false);
+            File.Move(temp, path, overwrite: true);
+
+            Console.WriteLine($"Fabric {loaderVersion} 已合并到 {id}");
+            transaction.Commit();
+            return (id, path);
+        }
+        catch
         {
-            throw new InvalidOperationException($"缺少原版 version.json：{parentPath}");
+            transaction.Rollback(Console.WriteLine);
+            throw;
         }
-
-        string merged = VersionMerger.Merge(File.ReadAllText(parentPath), profileJson);
-
-        string dir = Path.Combine(installRoot, "versions", id);
-        Directory.CreateDirectory(dir);
-        string path = Path.Combine(dir, id + ".json");
-        string temp = path + ".part";
-        await File.WriteAllTextAsync(temp, merged, cancellationToken).ConfigureAwait(false);
-        File.Move(temp, path, overwrite: true);
-
-        Console.WriteLine($"Fabric {loaderVersion} 已合并到 {id}");
-        return (id, path);
     }
 
     // Fabric 的 meta 里 fabric-loader / intermediary 不带 sha1，但 maven 仓库有 .sha1 旁文件。

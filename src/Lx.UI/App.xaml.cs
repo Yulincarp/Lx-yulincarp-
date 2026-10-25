@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Threading;
 using Lx.Probe;
 using Lx.Probe.Diagnostics;
+using Lx.Probe.Model;
 
 namespace Lx.UI;
 
@@ -40,6 +41,7 @@ public partial class App : Application
 
         Log.Initialize(Path.Combine(installRoot, "logs"));
         Log.Info($"Lx Launcher {AppInfo.Version} 启动；数据目录 {installRoot}（{(AppPaths.IsPortable ? "便携模式" : "标准模式")}）");
+        ThemeManager.Apply(SettingsStore.Load(installRoot).Theme);
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;

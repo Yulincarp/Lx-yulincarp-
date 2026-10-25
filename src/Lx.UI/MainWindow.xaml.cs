@@ -237,7 +237,7 @@ public partial class MainWindow : Window
             $"窗口：{settings.WindowWidth}×{settings.WindowHeight}{(settings.Fullscreen ? " 全屏" : string.Empty)}{Environment.NewLine}" +
             $"下载源：{DownloadUrlRewriter.Describe(source)}{Environment.NewLine}" +
             $"并发：{settings.DownloadConcurrency}　代理：{settings.ProxyMode ?? "system"}{Environment.NewLine}" +
-            $"更新通道：{settings.UpdateChannel ?? "stable"}";
+            $"更新通道：{settings.UpdateChannel ?? "stable"}　主题：{settings.Theme ?? "light"}";
         DataDirText.Text = $"数据目录：{_installRoot}";
         CurseForgeKeyStatus.Text = CurseForgeClient.ResolveKey(_installRoot) is null
             ? "未保存 Key"

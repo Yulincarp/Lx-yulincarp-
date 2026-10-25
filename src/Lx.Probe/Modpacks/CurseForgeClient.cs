@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using Lx.Probe.Mods;
+using Lx.Probe.Net;
 
 namespace Lx.Probe.Modpacks;
 
@@ -25,7 +26,7 @@ public static class CurseForgeClient
 {
     private const string Base = "https://api.curseforge.com/v1";
 
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
+    private static HttpClient Http => ProxyConfig.GetClient(TimeSpan.FromSeconds(30), AppInfo.UserAgent);
 
     public static string KeyFile(string installRoot) => Path.Combine(installRoot, "curseforge-key.txt");
 

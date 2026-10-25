@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Lx.Probe.Net;
 
 namespace Lx.Probe.Model;
 
@@ -16,7 +17,8 @@ public sealed record LaunchSettings(
     int DownloadConcurrency = 8,
     string? ProxyMode = "system",
     string? ProxyUrl = null,
-    string? UpdateChannel = "stable")
+    string? UpdateChannel = "stable",
+    string? Theme = "light")
 {
     public const int MinAllowedMb = 256;
     public const int MaxAllowedMb = 65536;
@@ -40,17 +42,23 @@ public static class SettingsStore
         string path = PathFor(installRoot);
         if (!File.Exists(path))
         {
-            return new LaunchSettings();
+            var defaults = new LaunchSettings();
+            ProxyConfig.Configure(defaults.ProxyMode, defaults.ProxyUrl);
+            return defaults;
         }
 
         try
         {
-            return JsonSerializer.Deserialize<LaunchSettings>(File.ReadAllText(path), Options)
+            LaunchSettings settings = JsonSerializer.Deserialize<LaunchSettings>(File.ReadAllText(path), Options)
                    ?? new LaunchSettings();
+            ProxyConfig.Configure(settings.ProxyMode, settings.ProxyUrl);
+            return settings;
         }
         catch (JsonException)
         {
-            return new LaunchSettings();
+            var defaults = new LaunchSettings();
+            ProxyConfig.Configure(defaults.ProxyMode, defaults.ProxyUrl);
+            return defaults;
         }
     }
 
@@ -58,5 +66,6 @@ public static class SettingsStore
     {
         Directory.CreateDirectory(installRoot);
         File.WriteAllText(PathFor(installRoot), JsonSerializer.Serialize(settings, Options));
+        ProxyConfig.Configure(settings.ProxyMode, settings.ProxyUrl);
     }
 }

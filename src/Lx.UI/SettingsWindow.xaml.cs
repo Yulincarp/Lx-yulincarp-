@@ -86,6 +86,7 @@ public partial class SettingsWindow : Window
             .OfType<ComboBoxItem>()
             .FirstOrDefault(item => string.Equals(item.Tag as string, channel, StringComparison.OrdinalIgnoreCase))
             ?? UpdateChannelBox.Items[0];
+        ThemeBox.SelectedIndex = string.Equals(settings.Theme, "dark", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
     }
 
     private string SelectedSourceKey() =>
@@ -256,6 +257,7 @@ public partial class SettingsWindow : Window
 
         JavaChoice? java = JavaBox.SelectedItem as JavaChoice;
         string channel = (UpdateChannelBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "stable";
+        string theme = ThemeBox.SelectedIndex == 1 ? "dark" : "light";
 
         SettingsStore.Save(_installRoot, new LaunchSettings(
             MinMemoryMb: min,
@@ -270,9 +272,11 @@ public partial class SettingsWindow : Window
             DownloadConcurrency: concurrency,
             ProxyMode: proxyMode,
             ProxyUrl: proxyUrl,
-            UpdateChannel: channel));
+            UpdateChannel: channel,
+            Theme: theme));
 
         Downloader.ConfigureProxy(proxyMode, proxyUrl);
+        ThemeManager.Apply(theme);
         DialogResult = true;
         Close();
     }

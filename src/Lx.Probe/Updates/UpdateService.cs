@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Lx.Probe.Model;
+using Lx.Probe.Net;
 
 namespace Lx.Probe.Updates;
 
@@ -16,7 +17,7 @@ public sealed record StagedUpdate(string Version, string ZipPath, string Staging
 // 默认只对发布版开放；开发版（src\Lx.UI\bin）不走自更新。
 public static class UpdateService
 {
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(30) };
+    private static HttpClient Http => ProxyConfig.GetClient(TimeSpan.FromMinutes(30), AppInfo.UserAgent);
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
     public static bool CanSelfUpdate =>

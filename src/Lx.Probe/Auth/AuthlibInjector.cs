@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Lx.Probe.Net;
 using Lx.Probe.Resolve;
 
 namespace Lx.Probe.Auth;
@@ -12,7 +13,7 @@ public static class AuthlibInjector
     private const string OfficialMetadata = "https://authlib-injector.yushi.moe/artifact/latest.json";
     private const string MirrorMetadata = "https://bmclapi2.bangbang93.com/mirrors/authlib-injector/artifact/latest.json";
 
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(60) };
+    private static HttpClient Http => ProxyConfig.GetClient(TimeSpan.FromSeconds(60), AppInfo.UserAgent);
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
     public static async Task<string> EnsureAsync(

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using Lx.Probe.Net;
 using Lx.Probe.Resolve;
 
 namespace Lx.Probe.Loaders;
@@ -20,17 +21,8 @@ public static class ForgeInstaller
     private const string ForgeMirrorMetadata = NeoForgeMirrorBase + "net/minecraftforge/forge/maven-metadata.xml";
 
     // 有些 maven（Cloudflare 后面）对 HTTP/2 支持不好，会一直挂着，强制 HTTP/1.1。
-    private static readonly HttpClient Http = new(new HttpClientHandler())
-    {
-        Timeout = TimeSpan.FromSeconds(120),
-        DefaultRequestVersion = System.Net.HttpVersion.Version11,
-        DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
-    };
-
-    static ForgeInstaller()
-    {
-        Http.DefaultRequestHeaders.UserAgent.ParseAdd(AppInfo.UserAgent);
-    }
+    private static HttpClient Http =>
+        ProxyConfig.GetClient(TimeSpan.FromSeconds(120), AppInfo.UserAgent, http11: true);
 
     // 给界面用：列出某个 Minecraft 版本可用的 Forge 版本（完整坐标，如 1.20.1-47.2.0，新到旧）。
     public static async Task<List<string>> GetForgeVersionsAsync(string minecraftVersion)
@@ -74,16 +66,28 @@ public static class ForgeInstaller
         CancellationToken cancellationToken = default)
     {
         progress?.Report(new LoaderInstallProgress("准备", "查询加载器版本…"));
-        string installerPath = loader.ToLowerInvariant() switch
+        VersionTransaction transaction = VersionTransaction.Begin(installRoot);
+        try
         {
-            "forge" => await DownloadForgeAsync(minecraftVersion, loaderVersion, installRoot, log, progress, cancellationToken).ConfigureAwait(false),
-            "neoforge" => await DownloadNeoForgeAsync(minecraftVersion, loaderVersion, installRoot, artifactSource, log, progress, cancellationToken).ConfigureAwait(false),
-            _ => throw new InvalidOperationException($"不认识的加载器：{loader}（只支持 forge / neoforge）"),
-        };
+            string installerPath = loader.ToLowerInvariant() switch
+            {
+                "forge" => await DownloadForgeAsync(minecraftVersion, loaderVersion, installRoot, log, progress, cancellationToken).ConfigureAwait(false),
+                "neoforge" => await DownloadNeoForgeAsync(minecraftVersion, loaderVersion, installRoot, artifactSource, log, progress, cancellationToken).ConfigureAwait(false),
+                _ => throw new InvalidOperationException($"不认识的加载器：{loader}（只支持 forge / neoforge）"),
+            };
 
-        await RunInstallerAsync(installerPath, installRoot, log, progress, cancellationToken).ConfigureAwait(false);
-        progress?.Report(new LoaderInstallProgress("完成", "查找安装器生成的版本…"));
-        return FindInstalledVersionId(installRoot, minecraftVersion, loader);
+            await RunInstallerAsync(installerPath, installRoot, log, progress, cancellationToken).ConfigureAwait(false);
+            progress?.Report(new LoaderInstallProgress("完成", "查找安装器生成的版本…"));
+            string installedId = FindInstalledVersionId(installRoot, minecraftVersion, loader);
+            transaction.Commit();
+            return installedId;
+        }
+        catch
+        {
+            progress?.Report(new LoaderInstallProgress("回滚", "安装失败，清理未完成的版本目录…"));
+            transaction.Rollback(log);
+            throw;
+        }
     }
 
     private static async Task<string> DownloadForgeAsync(
