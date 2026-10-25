@@ -6,6 +6,8 @@ using Lx.Probe.Resolve;
 
 namespace Lx.Probe.Loaders;
 
+public sealed record LoaderInstallProgress(string Stage, string Message);
+
 // Forge / NeoForge：下载官方 installer，用 `--installClient` 跑一遍，产出本地 version.json。
 // 之后启动时用 --version <生成的 id> 就行（它自带 inheritsFrom）。
 public static class ForgeInstaller
@@ -67,24 +69,34 @@ public static class ForgeInstaller
         string loader,
         string? loaderVersion,
         Action<string> log,
-        string? artifactSource = null)
+        string? artifactSource = null,
+        IProgress<LoaderInstallProgress>? progress = null,
+        CancellationToken cancellationToken = default)
     {
+        progress?.Report(new LoaderInstallProgress("准备", "查询加载器版本…"));
         string installerPath = loader.ToLowerInvariant() switch
         {
-            "forge" => await DownloadForgeAsync(minecraftVersion, loaderVersion, installRoot, log).ConfigureAwait(false),
-            "neoforge" => await DownloadNeoForgeAsync(minecraftVersion, loaderVersion, installRoot, artifactSource, log).ConfigureAwait(false),
+            "forge" => await DownloadForgeAsync(minecraftVersion, loaderVersion, installRoot, log, progress, cancellationToken).ConfigureAwait(false),
+            "neoforge" => await DownloadNeoForgeAsync(minecraftVersion, loaderVersion, installRoot, artifactSource, log, progress, cancellationToken).ConfigureAwait(false),
             _ => throw new InvalidOperationException($"不认识的加载器：{loader}（只支持 forge / neoforge）"),
         };
 
-        await RunInstallerAsync(installerPath, installRoot, log).ConfigureAwait(false);
-
+        await RunInstallerAsync(installerPath, installRoot, log, progress, cancellationToken).ConfigureAwait(false);
+        progress?.Report(new LoaderInstallProgress("完成", "查找安装器生成的版本…"));
         return FindInstalledVersionId(installRoot, minecraftVersion, loader);
     }
 
-    private static async Task<string> DownloadForgeAsync(string minecraftVersion, string? loaderVersion, string installRoot, Action<string> log)
+    private static async Task<string> DownloadForgeAsync(
+        string minecraftVersion,
+        string? loaderVersion,
+        string installRoot,
+        Action<string> log,
+        IProgress<LoaderInstallProgress>? progress,
+        CancellationToken cancellationToken)
     {
+        progress?.Report(new LoaderInstallProgress("下载", "查询 Forge 版本列表…"));
         log("查询 Forge 版本列表…");
-        string xml = await Http.GetStringAsync(ForgeMetadata).ConfigureAwait(false);
+        string xml = await Http.GetStringAsync(ForgeMetadata, cancellationToken).ConfigureAwait(false);
         List<string> versions = ReadVersions(xml);
 
         string? picked = loaderVersion;
@@ -102,14 +114,23 @@ public static class ForgeInstaller
         }
 
         log($"选择 Forge {picked}");
+        progress?.Report(new LoaderInstallProgress("下载", $"Forge {picked} 安装器"));
         string url = $"https://maven.minecraftforge.net/net/minecraftforge/forge/{picked}/forge-{picked}-installer.jar";
-        return await DownloadInstallerAsync(url, installRoot, $"forge-{picked}-installer.jar", log).ConfigureAwait(false);
+        return await DownloadInstallerAsync(url, installRoot, $"forge-{picked}-installer.jar", log, progress, cancellationToken).ConfigureAwait(false);
     }
 
-    private static async Task<string> DownloadNeoForgeAsync(string minecraftVersion, string? loaderVersion, string installRoot, string? artifactSource, Action<string> log)
+    private static async Task<string> DownloadNeoForgeAsync(
+        string minecraftVersion,
+        string? loaderVersion,
+        string installRoot,
+        string? artifactSource,
+        Action<string> log,
+        IProgress<LoaderInstallProgress>? progress,
+        CancellationToken cancellationToken)
     {
+        progress?.Report(new LoaderInstallProgress("下载", "查询 NeoForge 版本列表…"));
         log("查询 NeoForge 版本列表…");
-        string xml = await GetTextWithFallbackAsync(NeoForgeMetadata, NeoForgeMirrorMetadata, log).ConfigureAwait(false);
+        string xml = await GetTextWithFallbackAsync(NeoForgeMetadata, NeoForgeMirrorMetadata, log, cancellationToken).ConfigureAwait(false);
         List<string> versions = ReadVersions(xml);
 
         string prefix = NeoForgePrefix(minecraftVersion);
@@ -129,11 +150,13 @@ public static class ForgeInstaller
         }
 
         log($"选择 NeoForge {picked}");
+        progress?.Report(new LoaderInstallProgress("下载", $"NeoForge {picked} 安装器"));
         string fileName = $"neoforge-{picked}-installer.jar";
         string directUrl = $"https://maven.neoforged.net/releases/net/neoforged/neoforge/{picked}/{fileName}";
         string mirrorUrl = $"{NeoForgeMirrorBase}net/neoforged/neoforge/{picked}/{fileName}";
-        string installer = await DownloadInstallerWithFallbackAsync(directUrl, mirrorUrl, installRoot, fileName, log).ConfigureAwait(false);
-        return PatchNeoForgeInstaller(installer, installRoot, artifactSource, log);
+        string installer = await DownloadInstallerWithFallbackAsync(
+            directUrl, mirrorUrl, installRoot, fileName, log, progress, cancellationToken).ConfigureAwait(false);
+        return PatchNeoForgeInstaller(installer, installRoot, artifactSource, log, progress);
     }
 
     // 1.20.253 和 1.20.99 这种，必须按数字比，不能按字符串。
@@ -191,17 +214,23 @@ public static class ForgeInstaller
             .ToList();
     }
 
-    private static async Task<string> GetTextWithFallbackAsync(string direct, string mirror, Action<string> log)
+    private static async Task<string> GetTextWithFallbackAsync(
+        string direct,
+        string mirror,
+        Action<string> log,
+        CancellationToken cancellationToken = default)
     {
         try
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(TimeSpan.FromSeconds(15));
             return await Http.GetStringAsync(direct, cts.Token).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             log($"直连失败（{ex.GetType().Name}），改用镜像");
-            return await Http.GetStringAsync(mirror).ConfigureAwait(false);
+            return await Http.GetStringAsync(mirror, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -210,7 +239,9 @@ public static class ForgeInstaller
         string mirrorUrl,
         string installRoot,
         string fileName,
-        Action<string> log)
+        Action<string> log,
+        IProgress<LoaderInstallProgress>? progress,
+        CancellationToken cancellationToken)
     {
         string dir = Path.Combine(installRoot, "installers");
         Directory.CreateDirectory(dir);
@@ -218,12 +249,14 @@ public static class ForgeInstaller
         if (File.Exists(path) && new FileInfo(path).Length > 1024 * 1024)
         {
             log($"安装器已存在：{path}");
+            progress?.Report(new LoaderInstallProgress("下载", "安装器已存在，跳过下载"));
             return path;
         }
 
         try
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(TimeSpan.FromSeconds(20));
             using HttpResponseMessage response = await Http
                 .GetAsync(directUrl, HttpCompletionOption.ResponseHeadersRead, cts.Token)
                 .ConfigureAwait(false);
@@ -235,29 +268,39 @@ public static class ForgeInstaller
             }
 
             log("安装器直连下载成功");
+            progress?.Report(new LoaderInstallProgress("下载", "安装器直连下载成功"));
             return path;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException or IOException)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             log($"直连下载失败（{ex.GetType().Name}），改用镜像");
         }
 
         log($"从镜像下载安装器：{mirrorUrl}");
-        using HttpResponseMessage mirrorResponse = await Http.GetAsync(mirrorUrl).ConfigureAwait(false);
+        progress?.Report(new LoaderInstallProgress("下载", "直连失败，改用 BMCLAPI 镜像"));
+        using HttpResponseMessage mirrorResponse = await Http.GetAsync(mirrorUrl, cancellationToken).ConfigureAwait(false);
         mirrorResponse.EnsureSuccessStatusCode();
-        await using (Stream input = await mirrorResponse.Content.ReadAsStreamAsync().ConfigureAwait(false))
+        await using (Stream input = await mirrorResponse.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
         await using (FileStream output = File.Create(path))
         {
-            await input.CopyToAsync(output).ConfigureAwait(false);
+            await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
         }
 
         log($"安装器已下载：{new FileInfo(path).Length / 1024 / 1024} MB");
+        progress?.Report(new LoaderInstallProgress("下载", $"安装器已下载（{new FileInfo(path).Length / 1024 / 1024} MB）"));
         return path;
     }
 
     // 安装器里的库地址写死成 maven.neoforged.net，这里整包改写成 BMCLAPI 镜像。
-    private static string PatchNeoForgeInstaller(string installerPath, string installRoot, string? artifactSource, Action<string> log)
+    private static string PatchNeoForgeInstaller(
+        string installerPath,
+        string installRoot,
+        string? artifactSource,
+        Action<string> log,
+        IProgress<LoaderInstallProgress>? progress)
     {
+        progress?.Report(new LoaderInstallProgress("改写", "把 NeoForge 安装器里的 maven 地址改成 BMCLAPI…"));
         string patched = Path.Combine(
             Path.GetDirectoryName(installerPath)!,
             Path.GetFileNameWithoutExtension(installerPath) + "-mirror.jar");
@@ -313,6 +356,7 @@ public static class ForgeInstaller
         }
 
         log("已把安装器里的 maven 地址改写为 BMCLAPI 镜像");
+        progress?.Report(new LoaderInstallProgress("改写", "安装器镜像改写完成"));
         return patched;
     }
 
@@ -405,7 +449,13 @@ public static class ForgeInstaller
         }
     }
 
-    private static async Task<string> DownloadInstallerAsync(string url, string installRoot, string fileName, Action<string> log)
+    private static async Task<string> DownloadInstallerAsync(
+        string url,
+        string installRoot,
+        string fileName,
+        Action<string> log,
+        IProgress<LoaderInstallProgress>? progress,
+        CancellationToken cancellationToken)
     {
         string dir = Path.Combine(installRoot, "installers");
         Directory.CreateDirectory(dir);
@@ -414,23 +464,31 @@ public static class ForgeInstaller
         if (File.Exists(path) && new FileInfo(path).Length > 1024 * 1024)
         {
             log($"安装器已存在：{path}");
+            progress?.Report(new LoaderInstallProgress("下载", "安装器已存在，跳过下载"));
             return path;
         }
 
         log($"下载安装器：{url}");
-        using HttpResponseMessage response = await Http.GetAsync(url).ConfigureAwait(false);
+        progress?.Report(new LoaderInstallProgress("下载", "正在下载 Forge 安装器…"));
+        using HttpResponseMessage response = await Http.GetAsync(url, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
-        await using (Stream input = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+        await using (Stream input = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
         await using (FileStream output = File.Create(path))
         {
-            await input.CopyToAsync(output).ConfigureAwait(false);
+            await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
         }
 
         log($"安装器已下载：{new FileInfo(path).Length / 1024 / 1024} MB");
+        progress?.Report(new LoaderInstallProgress("下载", $"安装器已下载（{new FileInfo(path).Length / 1024 / 1024} MB）"));
         return path;
     }
 
-    private static async Task RunInstallerAsync(string installerPath, string installRoot, Action<string> log)
+    private static async Task RunInstallerAsync(
+        string installerPath,
+        string installRoot,
+        Action<string> log,
+        IProgress<LoaderInstallProgress>? progress,
+        CancellationToken cancellationToken)
     {
         // Forge 安装器要求目录里有 launcher_profiles.json，否则直接拒绝。
         string profiles = Path.Combine(installRoot, "launcher_profiles.json");
@@ -445,6 +503,7 @@ public static class ForgeInstaller
         Directory.CreateDirectory(workTemp);
 
         log("运行安装器（第一次会下载很多库，几分钟）…");
+        progress?.Report(new LoaderInstallProgress("安装", "java 安装器运行中，第一次会下载很多库…"));
         var startInfo = new ProcessStartInfo("java")
         {
             Arguments = $"-jar \"{installerPath}\" --installClient \"{installRoot}\"",
@@ -470,6 +529,7 @@ public static class ForgeInstaller
                 if (output.Count % 10 == 0)
                 {
                     log("  " + e.Data);
+                    progress?.Report(new LoaderInstallProgress("安装", e.Data));
                 }
             }
         };
@@ -484,10 +544,11 @@ public static class ForgeInstaller
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
-        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        using var waitCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        waitCts.CancelAfter(TimeSpan.FromMinutes(10));
         try
         {
-            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+            await process.WaitForExitAsync(waitCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -500,6 +561,11 @@ public static class ForgeInstaller
                 // 已经退出了
             }
 
+            if (cancellationToken.IsCancellationRequested)
+            {
+                throw new OperationCanceledException("已取消安装", cancellationToken);
+            }
+
             throw new InvalidOperationException("安装器超时（10 分钟），检查网络或磁盘");
         }
 
@@ -510,6 +576,7 @@ public static class ForgeInstaller
         }
 
         log("安装器执行完成");
+        progress?.Report(new LoaderInstallProgress("安装", "安装器执行完成"));
     }
 
     private static string FindInstalledVersionId(string installRoot, string minecraftVersion, string loader)

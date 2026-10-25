@@ -45,6 +45,7 @@ public partial class MainWindow : Window
 
     private readonly Dictionary<string, List<LoaderChoice>> _loaderVersionCache = new();
     private int _loaderVersionRequest;
+    private CancellationTokenSource? _loaderInstallCts;
 
     private bool IsFabricSelected => LoaderBox.SelectedIndex == 1;
 
@@ -101,6 +102,7 @@ public partial class MainWindow : Window
         try
         {
             LaunchSettings settings = SettingsStore.Load(_installRoot);
+            Downloader.ConfigureProxy(settings.ProxyMode, settings.ProxyUrl);
             var source = new DownloadSourceSettings(settings.DownloadSource, settings.CustomDownloadBase);
             Func<string, string> rewriteUrl = url => DownloadUrlRewriter.Rewrite(url, source);
 
@@ -225,12 +227,17 @@ public partial class MainWindow : Window
     private void RefreshSettingsSummary()
     {
         LaunchSettings settings = SettingsStore.Load(_installRoot);
+        Downloader.ConfigureProxy(settings.ProxyMode, settings.ProxyUrl);
         var source = new DownloadSourceSettings(settings.DownloadSource, settings.CustomDownloadBase);
         SettingsSummaryText.Text =
             $"启动器版本：v{AppInfo.Version}{Environment.NewLine}" +
             $"内存：{settings.MinMemoryMb}–{settings.MaxMemoryMb} MB{Environment.NewLine}" +
             $"Java：{settings.JavaPath ?? "自动"}{Environment.NewLine}" +
-            $"下载源：{DownloadUrlRewriter.Describe(source)}";
+            $"JVM 参数：{settings.JvmArgs ?? "（默认）"}{Environment.NewLine}" +
+            $"窗口：{settings.WindowWidth}×{settings.WindowHeight}{(settings.Fullscreen ? " 全屏" : string.Empty)}{Environment.NewLine}" +
+            $"下载源：{DownloadUrlRewriter.Describe(source)}{Environment.NewLine}" +
+            $"并发：{settings.DownloadConcurrency}　代理：{settings.ProxyMode ?? "system"}{Environment.NewLine}" +
+            $"更新通道：{settings.UpdateChannel ?? "stable"}";
         DataDirText.Text = $"数据目录：{_installRoot}";
         CurseForgeKeyStatus.Text = CurseForgeClient.ResolveKey(_installRoot) is null
             ? "未保存 Key"
@@ -703,13 +710,30 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_loaderInstallCts is not null)
+        {
+            Log("安装器已经在运行");
+            return;
+        }
+
         string loader = LoaderBox.SelectedIndex == 2 ? "forge" : "neoforge";
         string display = loader == "forge" ? "Forge" : "NeoForge";
 
+        var cts = new CancellationTokenSource();
+        _loaderInstallCts = cts;
+        LoaderInstallLog.Clear();
+        LoaderInstallExpander.IsExpanded = true;
+        CancelLoaderButton.IsEnabled = true;
         InstallLoaderButton.IsEnabled = false;
         LaunchButton.IsEnabled = false;
         Progress.IsIndeterminate = true;
         StatusText.Text = $"正在安装 {display} {choice.Version}…";
+
+        var progress = new Progress<LoaderInstallProgress>(p =>
+        {
+            AppendLoaderInstallLog($"[{p.Stage}] {p.Message}");
+            StatusText.Text = $"{p.Stage}：{p.Message}";
+        });
 
         try
         {
@@ -718,7 +742,9 @@ public partial class MainWindow : Window
                 _installRoot,
                 loader,
                 choice.Version,
-                message => Dispatcher.Invoke(() => Log(message)));
+                message => Dispatcher.Invoke(() => Log(message)),
+                progress: progress,
+                cancellationToken: cts.Token);
 
             Log($"安装完成：{display} {choice.Version} → {installedId}");
             StatusText.Text = $"已安装 {installedId}";
@@ -749,6 +775,11 @@ public partial class MainWindow : Window
                 RefreshInstances(instance.Name);
             }
         }
+        catch (OperationCanceledException)
+        {
+            Log($"已取消安装 {display}");
+            StatusText.Text = "已取消安装";
+        }
         catch (Exception ex)
         {
             LogError($"安装 {display} 失败", ex);
@@ -756,10 +787,45 @@ public partial class MainWindow : Window
         }
         finally
         {
+            if (ReferenceEquals(_loaderInstallCts, cts))
+            {
+                _loaderInstallCts = null;
+            }
+
+            cts.Dispose();
             Progress.IsIndeterminate = false;
+            CancelLoaderButton.IsEnabled = false;
             LaunchButton.IsEnabled = _gameProcess is null;
             InstallLoaderButton.IsEnabled = IsForgeSelected && LoaderVersionBox.Items.Count > 0;
         }
+    }
+
+    private void CancelLoader_Click(object sender, RoutedEventArgs e)
+    {
+        if (_loaderInstallCts is null)
+        {
+            return;
+        }
+
+        StatusText.Text = "正在取消安装…";
+        CancelLoaderButton.IsEnabled = false;
+        _loaderInstallCts.Cancel();
+    }
+
+    private void AppendLoaderInstallLog(string message)
+    {
+        if (LoaderInstallLog is null)
+        {
+            return;
+        }
+
+        LoaderInstallLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}");
+        if (LoaderInstallLog.Text.Length > 50000)
+        {
+            LoaderInstallLog.Text = LoaderInstallLog.Text[^30000..];
+        }
+
+        LoaderInstallLog.ScrollToEnd();
     }
 
     // ---------- mods ----------

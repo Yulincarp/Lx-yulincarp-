@@ -127,12 +127,22 @@
                                 <Button x:Name="InstallLoaderButton" Content="安装" Margin="6,0,0,0" Padding="10,3"
                                         IsEnabled="False" Click="InstallLoader_Click"
                                         ToolTip="Forge/NeoForge 专用：先安装，再把版本切到生成的条目；Fabric 在启动时自动安装"/>
+                                <Button x:Name="CancelLoaderButton" Content="取消安装" Margin="6,0,0,0" Padding="10,3"
+                                        IsEnabled="False" Click="CancelLoader_Click"/>
                             </StackPanel>
                         </WrapPanel>
                     </Border>
 
-                    <TextBlock Grid.Row="2" Foreground="#888" TextWrapping="Wrap" Margin="0,14,0,0"
-                               Text="Fabric 选版本即可，启动时自动合并；Forge/NeoForge 选版本后点「安装」，安装完版本会自动切到生成的条目。启动按钮在底部。"/>
+                    <StackPanel Grid.Row="2" Margin="0,14,0,0">
+                        <Expander x:Name="LoaderInstallExpander" Header="安装日志" IsExpanded="False">
+                            <TextBox x:Name="LoaderInstallLog" Height="150" IsReadOnly="True"
+                                     Margin="0,6,0,0" VerticalScrollBarVisibility="Auto"
+                                     HorizontalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="11"
+                                     TextWrapping="NoWrap"/>
+                        </Expander>
+                        <TextBlock Foreground="#888" TextWrapping="Wrap" Margin="0,10,0,0"
+                                   Text="Fabric 选版本即可，启动时自动合并；Forge/NeoForge 选版本后点「安装」，安装完版本会自动切到生成的条目。安装器运行中可以取消，已生成的部分文件会保留，下次安装会复用。启动按钮在底部。"/>
+                    </StackPanel>
                 </Grid>
 
                 <Grid x:Name="InstanceView" Visibility="Collapsed">

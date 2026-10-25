@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Lx.Probe.Model;
 
 namespace Lx.Probe.Updates;
 
@@ -30,7 +31,11 @@ public static class UpdateService
             return fromEnv.Trim();
         }
 
-        string local = Path.Combine(installRoot, "update.json");
+        string channel = SettingsStore.Load(installRoot).UpdateChannel ?? "stable";
+        string fileName = string.Equals(channel, "beta", StringComparison.OrdinalIgnoreCase)
+            ? "update-beta.json"
+            : "update.json";
+        string local = Path.Combine(installRoot, fileName);
         return File.Exists(local) ? local : null;
     }
 

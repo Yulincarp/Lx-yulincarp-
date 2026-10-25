@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Lx.Probe.Auth;
 using Lx.Probe.Model;
@@ -108,8 +109,10 @@ public static class LaunchPipeline
         }
 
         LaunchSettings settings = SettingsStore.Load(installRoot);
+        Downloader.ConfigureProxy(settings.ProxyMode, settings.ProxyUrl);
         var source = new DownloadSourceSettings(settings.DownloadSource, settings.CustomDownloadBase);
         Func<string, string> rewriteUrl = url => DownloadUrlRewriter.Rewrite(url, source);
+        int downloadConcurrency = Math.Clamp(settings.DownloadConcurrency, 1, 16);
         log($"下载源：{DownloadUrlRewriter.Describe(source)}");
 
         VersionManifest manifest = await ManifestService
@@ -171,7 +174,7 @@ public static class LaunchPipeline
         int failed = await Downloader.DownloadAllAsync(
             manifestItems,
             installRoot,
-            8,
+            downloadConcurrency,
             (done, total) => progress?.Report(new LaunchProgress("游戏文件", done, total)),
             ReportFailure,
             cancellationToken).ConfigureAwait(false);
@@ -184,7 +187,7 @@ public static class LaunchPipeline
         int failedAssets = await Downloader.DownloadAllAsync(
             assets,
             installRoot,
-            8,
+            downloadConcurrency,
             (done, total) => progress?.Report(new LaunchProgress("assets", done, total)),
             ReportFailure,
             cancellationToken).ConfigureAwait(false);
@@ -257,11 +260,15 @@ public static class LaunchPipeline
             ["classpath_separator"] = ";",
             ["clientid"] = "",
             ["auth_xuid"] = "",
-            ["resolution_width"] = "854",
-            ["resolution_height"] = "480",
+            ["resolution_width"] = Math.Max(settings.WindowWidth, LaunchSettings.MinWindowWidth).ToString(),
+            ["resolution_height"] = Math.Max(settings.WindowHeight, LaunchSettings.MinWindowHeight).ToString(),
         };
 
         List<string> jvmArgs = ArgumentExpander.Expand(version.Arguments?.Jvm, values, features);
+        foreach (string extra in SplitCommandLine(settings.JvmArgs))
+        {
+            jvmArgs.Insert(0, extra);
+        }
 
         // 这台机器的 %TEMP% 不可写（ImageIO / 部分 mod 会崩），统一指到安装目录里。
         string javaTemp = Path.Combine(installRoot, ".tmp", "java");
@@ -298,6 +305,10 @@ public static class LaunchPipeline
         }
 
         List<string> gameArgs = ArgumentExpander.Expand(version.Arguments?.Game, values, features);
+        if (settings.Fullscreen && !gameArgs.Contains("--fullscreen", StringComparer.OrdinalIgnoreCase))
+        {
+            gameArgs.Add("--fullscreen");
+        }
 
         if (settings.MaxMemoryMb > 0 && !jvmArgs.Any(arg => arg.StartsWith("-Xmx", StringComparison.OrdinalIgnoreCase)))
         {
@@ -325,5 +336,43 @@ public static class LaunchPipeline
         string commandLine = CommandLineBuilder.Build(javaExe, jvmArgs, version.MainClass ?? string.Empty, gameArgs);
 
         return new LaunchResult(versionId, gameRoot, commandLine, manifestItems.Count, assets.Count, javaExe);
+    }
+
+    // 简单 Windows 命令行拆分：支持双引号包住带空格的参数，足够处理 JVM 参数。
+    private static IEnumerable<string> SplitCommandLine(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            yield break;
+        }
+
+        var current = new StringBuilder();
+        bool quoted = false;
+        foreach (char ch in text)
+        {
+            if (ch == '"')
+            {
+                quoted = !quoted;
+                continue;
+            }
+
+            if (char.IsWhiteSpace(ch) && !quoted)
+            {
+                if (current.Length > 0)
+                {
+                    yield return current.ToString();
+                    current.Clear();
+                }
+
+                continue;
+            }
+
+            current.Append(ch);
+        }
+
+        if (current.Length > 0)
+        {
+            yield return current.ToString();
+        }
     }
 }

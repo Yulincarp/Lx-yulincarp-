@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using Lx.Probe;
@@ -15,11 +16,20 @@ public partial class SettingsWindow : Window
 
     private sealed record SourceChoice(string Key, string Display);
 
+    private sealed record ProxyChoice(string Key, string Display);
+
     private static readonly SourceChoice[] Sources =
     {
         new(DownloadSourceSettings.Official, "官方（Mojang）"),
         new(DownloadSourceSettings.Bmclapi, "BMCLAPI 镜像（国内推荐）"),
         new(DownloadSourceSettings.Custom, "自定义（兼容 BMCLAPI 路径）"),
+    };
+
+    private static readonly ProxyChoice[] Proxies =
+    {
+        new("system", "系统代理（Windows 设置）"),
+        new("none", "直连（不使用代理）"),
+        new("manual", "手动 HTTP 代理"),
     };
 
     private readonly string _installRoot;
@@ -29,10 +39,18 @@ public partial class SettingsWindow : Window
         InitializeComponent();
         _installRoot = installRoot;
         VersionText.Text = $"v{AppInfo.Version}";
+        AboutVersionText.Text = $"版本 v{AppInfo.Version}";
+        AboutRuntimeText.Text = RuntimeInformation.FrameworkDescription;
+        AboutDataDirText.Text = installRoot;
 
         LaunchSettings settings = SettingsStore.Load(installRoot);
         MinBox.Text = settings.MinMemoryMb.ToString();
         MaxBox.Text = settings.MaxMemoryMb.ToString();
+        JvmArgsBox.Text = settings.JvmArgs ?? string.Empty;
+        WindowWidthBox.Text = settings.WindowWidth.ToString();
+        WindowHeightBox.Text = settings.WindowHeight.ToString();
+        FullscreenBox.IsChecked = settings.Fullscreen;
+        ConcurrencyBox.Text = Math.Clamp(settings.DownloadConcurrency, 1, 16).ToString();
 
         var choices = new List<JavaChoice>
         {
@@ -53,13 +71,28 @@ public partial class SettingsWindow : Window
         SourceBox.DisplayMemberPath = "Display";
         string sourceKey = settings.DownloadSource ?? DownloadSourceSettings.Official;
         SourceBox.SelectedItem = Sources.FirstOrDefault(s => s.Key == sourceKey) ?? Sources[0];
-
         CustomSourceBox.Text = settings.CustomDownloadBase ?? string.Empty;
         CustomSourceBox.IsEnabled = SelectedSourceKey() == DownloadSourceSettings.Custom;
+
+        ProxyModeBox.ItemsSource = Proxies;
+        ProxyModeBox.DisplayMemberPath = "Display";
+        string proxyKey = settings.ProxyMode ?? "system";
+        ProxyModeBox.SelectedItem = Proxies.FirstOrDefault(p => p.Key == proxyKey) ?? Proxies[0];
+        ProxyUrlBox.Text = settings.ProxyUrl ?? string.Empty;
+        ProxyUrlBox.IsEnabled = SelectedProxyKey() == "manual";
+
+        string channel = settings.UpdateChannel ?? "stable";
+        UpdateChannelBox.SelectedItem = UpdateChannelBox.Items
+            .OfType<ComboBoxItem>()
+            .FirstOrDefault(item => string.Equals(item.Tag as string, channel, StringComparison.OrdinalIgnoreCase))
+            ?? UpdateChannelBox.Items[0];
     }
 
     private string SelectedSourceKey() =>
         (SourceBox.SelectedItem as SourceChoice)?.Key ?? DownloadSourceSettings.Official;
+
+    private string SelectedProxyKey() =>
+        (ProxyModeBox.SelectedItem as ProxyChoice)?.Key ?? "system";
 
     private void Source_Changed(object sender, SelectionChangedEventArgs e)
     {
@@ -69,6 +102,16 @@ public partial class SettingsWindow : Window
         }
 
         CustomSourceBox.IsEnabled = SelectedSourceKey() == DownloadSourceSettings.Custom;
+    }
+
+    private void Proxy_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (ProxyUrlBox is null)
+        {
+            return;
+        }
+
+        ProxyUrlBox.IsEnabled = SelectedProxyKey() == "manual";
     }
 
     private async void CheckUpdate_Click(object sender, RoutedEventArgs e)
@@ -171,6 +214,21 @@ public partial class SettingsWindow : Window
             return;
         }
 
+        if (!int.TryParse(WindowWidthBox.Text.Trim(), out int width) ||
+            !int.TryParse(WindowHeightBox.Text.Trim(), out int height) ||
+            width < LaunchSettings.MinWindowWidth || height < LaunchSettings.MinWindowHeight ||
+            width > LaunchSettings.MaxWindowSize || height > LaunchSettings.MaxWindowSize)
+        {
+            HintText.Text = $"窗口大小不对：宽 ≥ {LaunchSettings.MinWindowWidth}，高 ≥ {LaunchSettings.MinWindowHeight}，最大 {LaunchSettings.MaxWindowSize}";
+            return;
+        }
+
+        if (!int.TryParse(ConcurrencyBox.Text.Trim(), out int concurrency) || concurrency < 1 || concurrency > 16)
+        {
+            HintText.Text = "并发数要填 1 ~ 16";
+            return;
+        }
+
         string sourceKey = SelectedSourceKey();
         string? customBase = null;
         if (sourceKey == DownloadSourceSettings.Custom)
@@ -183,14 +241,38 @@ public partial class SettingsWindow : Window
             }
         }
 
+        string proxyMode = SelectedProxyKey();
+        string? proxyUrl = null;
+        if (proxyMode == "manual")
+        {
+            proxyUrl = ProxyUrlBox.Text.Trim();
+            if (!Uri.TryCreate(proxyUrl, UriKind.Absolute, out Uri? proxyUri) ||
+                (proxyUri.Scheme != Uri.UriSchemeHttp && proxyUri.Scheme != Uri.UriSchemeHttps))
+            {
+                HintText.Text = "手动代理要填 http:// 或 https:// 地址";
+                return;
+            }
+        }
+
         JavaChoice? java = JavaBox.SelectedItem as JavaChoice;
+        string channel = (UpdateChannelBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "stable";
+
         SettingsStore.Save(_installRoot, new LaunchSettings(
             MinMemoryMb: min,
             MaxMemoryMb: max,
             JavaPath: java?.Path,
             DownloadSource: sourceKey,
-            CustomDownloadBase: customBase));
+            CustomDownloadBase: customBase,
+            JvmArgs: string.IsNullOrWhiteSpace(JvmArgsBox.Text) ? null : JvmArgsBox.Text.Trim(),
+            WindowWidth: width,
+            WindowHeight: height,
+            Fullscreen: FullscreenBox.IsChecked == true,
+            DownloadConcurrency: concurrency,
+            ProxyMode: proxyMode,
+            ProxyUrl: proxyUrl,
+            UpdateChannel: channel));
 
+        Downloader.ConfigureProxy(proxyMode, proxyUrl);
         DialogResult = true;
         Close();
     }

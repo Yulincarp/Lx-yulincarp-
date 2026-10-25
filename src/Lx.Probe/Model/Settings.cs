@@ -2,16 +2,27 @@ using System.Text.Json;
 
 namespace Lx.Probe.Model;
 
-// 启动器设置：内存、Java、下载源。存在 minecraft/settings.json。
+// 启动器设置：游戏、下载、启动器。存在数据目录/settings.json。
 public sealed record LaunchSettings(
     int MinMemoryMb = 1024,
     int MaxMemoryMb = 4096,
     string? JavaPath = null,
     string? DownloadSource = null,
-    string? CustomDownloadBase = null)
+    string? CustomDownloadBase = null,
+    string? JvmArgs = null,
+    int WindowWidth = 854,
+    int WindowHeight = 480,
+    bool Fullscreen = false,
+    int DownloadConcurrency = 8,
+    string? ProxyMode = "system",
+    string? ProxyUrl = null,
+    string? UpdateChannel = "stable")
 {
     public const int MinAllowedMb = 256;
     public const int MaxAllowedMb = 65536;
+    public const int MinWindowWidth = 640;
+    public const int MinWindowHeight = 480;
+    public const int MaxWindowSize = 7680;
 }
 
 public static class SettingsStore
