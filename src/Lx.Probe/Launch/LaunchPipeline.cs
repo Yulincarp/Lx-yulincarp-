@@ -41,6 +41,12 @@ public static class LaunchPipeline
         Action<DownloadFailure>? onDownloadFailure = null,
         CancellationToken cancellationToken = default)
     {
+        if (!string.Equals(options.Account.Type, "offline", StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrEmpty(options.Account.AccessToken))
+        {
+            throw new InvalidOperationException("账号凭据无法解密（可能换了 Windows 用户或机器），请在启动器里重新登录");
+        }
+
         string installRoot = options.InstallRoot;
         LaunchSettings settings = SettingsStore.Load(installRoot);
         var source = new DownloadSourceSettings(settings.DownloadSource, settings.CustomDownloadBase);

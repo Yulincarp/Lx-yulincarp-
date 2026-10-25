@@ -1,11 +1,17 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using Lx.Probe.Diagnostics;
 using Lx.Probe.Model;
 
 namespace Lx.Probe.Auth;
 
-// 账号存本地：minecraft/accounts.json（明文，仅本机；密码永远不落盘）。
+// 账号存本地：minecraft/accounts.json。
+// AccessToken 用 Windows DPAPI（CurrentUser）加密；旧明文文件第一次读取时自动迁移。
 public static class AccountStore
 {
+    private const string ProtectedPrefix = "dpapi:";
+
     private static readonly JsonSerializerOptions Options = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -22,15 +28,44 @@ public static class AccountStore
             return new List<Account>();
         }
 
+        List<Account>? stored;
         try
         {
-            return JsonSerializer.Deserialize<List<Account>>(File.ReadAllText(path), Options)
-                   ?? new List<Account>();
+            stored = JsonSerializer.Deserialize<List<Account>>(File.ReadAllText(path), Options);
         }
         catch (JsonException)
         {
             return new List<Account>(); // 文件坏了就当没有，不挡住启动
         }
+
+        if (stored is null)
+        {
+            return new List<Account>();
+        }
+
+        bool needsMigration = false;
+        var result = new List<Account>(stored.Count);
+        foreach (Account account in stored)
+        {
+            string token = account.AccessToken ?? string.Empty;
+            if (IsProtected(token))
+            {
+                token = Unprotect(token, account.Name);
+            }
+            else if (token.Length > 0)
+            {
+                needsMigration = true;
+            }
+
+            result.Add(account with { AccessToken = token });
+        }
+
+        if (needsMigration && OperatingSystem.IsWindows())
+        {
+            TryMigrate(installRoot, path, result);
+        }
+
+        return result;
     }
 
     public static Account? FindByName(string installRoot, string name) =>
@@ -46,7 +81,95 @@ public static class AccountStore
             string.Equals(existing.Name, account.Name, StringComparison.OrdinalIgnoreCase));
         accounts.Add(account);
 
+        SaveAll(installRoot, accounts);
+    }
+
+    private static void SaveAll(string installRoot, List<Account> accounts)
+    {
         Directory.CreateDirectory(installRoot);
-        File.WriteAllText(PathFor(installRoot), JsonSerializer.Serialize(accounts, Options));
+
+        List<Account> stored = accounts
+            .Select(account => account with { AccessToken = Protect(account.AccessToken ?? string.Empty) })
+            .ToList();
+
+        string path = PathFor(installRoot);
+        string temp = path + ".tmp";
+        File.WriteAllText(temp, JsonSerializer.Serialize(stored, Options));
+        File.Move(temp, path, overwrite: true);
+    }
+
+    private static void TryMigrate(string installRoot, string path, List<Account> accounts)
+    {
+        string backup = path + ".bak";
+        try
+        {
+            File.Copy(path, backup, overwrite: true);
+            SaveAll(installRoot, accounts);
+
+            // 备份也覆盖成加密版本，别把旧明文 token 留在 .bak 里。
+            File.Copy(path, backup, overwrite: true);
+            Log.Info("accounts.json 已迁移为 DPAPI 加密");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or CryptographicException)
+        {
+            try
+            {
+                if (File.Exists(backup))
+                {
+                    File.Delete(backup);
+                }
+            }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+            {
+                // 备份删不掉就算了，下次启动继续尝试迁移
+            }
+
+            Log.Warn($"accounts.json 迁移失败（下次启动再试）：{ex.Message}");
+        }
+    }
+
+    private static bool IsProtected(string token) =>
+        token.StartsWith(ProtectedPrefix, StringComparison.Ordinal);
+
+    private static string Protect(string token)
+    {
+        if (token.Length == 0 || IsProtected(token) || !OperatingSystem.IsWindows())
+        {
+            return token;
+        }
+
+        try
+        {
+            byte[] cipher = ProtectedData.Protect(
+                Encoding.UTF8.GetBytes(token),
+                optionalEntropy: null,
+                DataProtectionScope.CurrentUser);
+            return ProtectedPrefix + Convert.ToBase64String(cipher);
+        }
+        catch (CryptographicException ex)
+        {
+            Log.Warn($"AccessToken 加密失败，按明文保存：{ex.Message}");
+            return token;
+        }
+    }
+
+    private static string Unprotect(string stored, string accountName)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            byte[] cipher = Convert.FromBase64String(stored[ProtectedPrefix.Length..]);
+            byte[] plain = ProtectedData.Unprotect(cipher, optionalEntropy: null, DataProtectionScope.CurrentUser);
+            return Encoding.UTF8.GetString(plain);
+        }
+        catch (Exception ex) when (ex is CryptographicException or FormatException)
+        {
+            Log.Warn($"账号 {accountName} 的 AccessToken 无法解密（换了 Windows 用户/机器？），需要重新登录");
+            return string.Empty;
+        }
     }
 }
