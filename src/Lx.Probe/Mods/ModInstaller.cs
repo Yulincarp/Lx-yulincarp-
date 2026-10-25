@@ -45,7 +45,9 @@ public static class ModInstaller
                 List<ModVersionInfo> versions = await ModrinthClient
                     .GetVersionsAsync(id, gameVersion, loader, cancellationToken)
                     .ConfigureAwait(false);
-                version = versions.FirstOrDefault();
+                version = versions.FirstOrDefault(v =>
+                              string.Equals(v.VersionType, "release", StringComparison.OrdinalIgnoreCase))
+                          ?? versions.FirstOrDefault();
             }
 
             if (version?.File is null)

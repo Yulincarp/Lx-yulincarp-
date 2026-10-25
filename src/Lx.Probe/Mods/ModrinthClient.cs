@@ -38,7 +38,8 @@ public sealed record ModVersionInfo(
     string VersionNumber,
     string Name,
     List<ModDependencyInfo> Dependencies,
-    ModFileInfo? File);
+    ModFileInfo? File,
+    string? VersionType = null);
 
 // 用 Modrinth 的「文件哈希查版本」接口判断更新，不需要猜 mod 的 slug。
 public static class ModrinthClient
@@ -88,7 +89,9 @@ public static class ModrinthClient
             return null;
         }
 
-        JsonNode latest = versions[0]!;
+        JsonNode latest = versions.FirstOrDefault(version =>
+            string.Equals(version?["version_type"]?.GetValue<string>(), "release", StringComparison.OrdinalIgnoreCase))
+            ?? versions[0]!;
         string? latestVersion = latest["version_number"]?.GetValue<string>();
         if (latestVersion is null || string.Equals(latestVersion, currentVersion, StringComparison.OrdinalIgnoreCase))
         {
@@ -213,7 +216,10 @@ public static class ModrinthClient
             return null;
         }
 
-        JsonNode? file = PickPrimaryFile(versions[0]!);
+        JsonNode latest = versions.FirstOrDefault(version =>
+            string.Equals(version?["version_type"]?.GetValue<string>(), "release", StringComparison.OrdinalIgnoreCase))
+            ?? versions[0]!;
+        JsonNode? file = PickPrimaryFile(latest);
         string? url = file?["url"]?.GetValue<string>();
         string? fileName = file?["filename"]?.GetValue<string>();
         if (url is null || fileName is null)
@@ -310,7 +316,8 @@ public static class ModrinthClient
                 fileName,
                 url,
                 primary?["hashes"]?["sha1"]?.GetValue<string>(),
-                primary?["size"]?.GetValue<long>() ?? 0));
+                primary?["size"]?.GetValue<long>() ?? 0),
+            version["version_type"]?.GetValue<string>());
     }
 
     private static JsonNode? PickPrimaryFile(JsonNode version)
