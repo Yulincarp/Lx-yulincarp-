@@ -95,7 +95,7 @@ public partial class App : Application
     {
         try
         {
-            Process.Start(new ProcessStartInfo(Log.DirectoryPath) { UseShellExecute = true });
+            ShellHelper.OpenFolder(Log.DirectoryPath);
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException)
         {

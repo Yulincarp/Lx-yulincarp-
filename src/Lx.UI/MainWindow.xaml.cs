@@ -776,7 +776,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            Process.Start(new ProcessStartInfo(LxLog.DirectoryPath) { UseShellExecute = true });
+            ShellHelper.OpenFolder(LxLog.DirectoryPath);
         }
         catch (Exception ex)
         {
