@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
@@ -28,9 +29,21 @@ public partial class MainWindow : Window
     private readonly ConcurrentQueue<DownloadFailure> _downloadFailures = new();
     private bool _suppressInstanceEvents;
 
+    private Process? _gameProcess;
+    private DateTime _gameStartedAt;
+    private bool _closing;
+
     public MainWindow()
     {
         InitializeComponent();
+        Closing += MainWindow_Closing;
+
+        if (Application.Current is { } app)
+        {
+            // 关机/注销时不弹"游戏还在运行"的确认，避免卡住系统。
+            app.SessionEnding += (_, _) => _closing = true;
+        }
+
         Loaded += async (_, _) => await InitializeAsync();
     }
 
@@ -609,6 +622,12 @@ public partial class MainWindow : Window
 
     private async void Launch_Click(object sender, RoutedEventArgs e)
     {
+        if (_gameProcess is { } runningGame && !runningGame.HasExited)
+        {
+            Log("游戏已经在运行，等它退出后再启动。");
+            return;
+        }
+
         if (AccountBox.SelectedItem is not Account account)
         {
             Log("先选一个账号（或添加一个离线账号）");
@@ -671,7 +690,11 @@ public partial class MainWindow : Window
             Log($"命令行：{result.CommandLine.Length} 字符");
             StartGame(result);
             Progress.Value = Progress.Maximum;
-            StatusText.Text = "已启动";
+
+            if (_gameProcess is null)
+            {
+                StatusText.Text = "启动失败";
+            }
 
             int failureCount = _downloadFailures.Count;
             if (failureCount > 0)
@@ -691,7 +714,7 @@ public partial class MainWindow : Window
         }
         finally
         {
-            LaunchButton.IsEnabled = true;
+            LaunchButton.IsEnabled = _gameProcess is null;
         }
     }
 
@@ -711,8 +734,131 @@ public partial class MainWindow : Window
         };
 
         Process? process = Process.Start(info);
-        Log(process is null ? "启动失败：进程没有创建" : $"已启动 java（PID {process.Id}）");
-        process?.Dispose();
+        if (process is null)
+        {
+            Log("启动失败：进程没有创建");
+            return;
+        }
+
+        _gameProcess = process;
+        _gameStartedAt = DateTime.Now;
+        process.EnableRaisingEvents = true;
+        process.Exited += GameProcess_Exited;
+
+        LaunchButton.IsEnabled = false;
+        LaunchButton.Content = "游戏运行中…";
+        StatusText.Text = $"游戏运行中（PID {process.Id}）";
+        Log($"已启动 java（PID {process.Id}）");
+    }
+
+    // Exited 在后台线程触发，算完退出码再回 UI 线程。
+    private void GameProcess_Exited(object? sender, EventArgs e)
+    {
+        if (sender is not Process process)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(process, _gameProcess))
+        {
+            process.Dispose();
+            return;
+        }
+
+        int? exitCode = null;
+        try
+        {
+            exitCode = process.ExitCode;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException)
+        {
+            // 拿不到就当未知
+        }
+
+        if (Dispatcher.HasShutdownStarted)
+        {
+            process.Dispose();
+            return;
+        }
+
+        Dispatcher.BeginInvoke(new Action(() => OnGameExited(process, exitCode)));
+    }
+
+    private void OnGameExited(Process process, int? exitCode)
+    {
+        if (!ReferenceEquals(process, _gameProcess))
+        {
+            process.Dispose();
+            return;
+        }
+
+        _gameProcess = null;
+        process.Dispose();
+
+        TimeSpan duration = DateTime.Now - _gameStartedAt;
+        string durationText = FormatDuration(duration);
+
+        LaunchButton.IsEnabled = true;
+        LaunchButton.Content = "启动游戏";
+        StatusText.Text = exitCode is null or 0
+            ? $"游戏已退出（{durationText}）"
+            : $"游戏异常退出（退出码 {exitCode}，{durationText}）";
+        Log($"游戏已退出：退出码 {exitCode?.ToString() ?? "未知"}，运行时长 {durationText}");
+
+        if (exitCode is int code && code != 0 && !_closing)
+        {
+            Log("[提示] 游戏异常退出，点「打开日志」查看 logs/latest.log");
+
+            MessageBoxResult choice = MessageBox.Show(
+                $"游戏异常退出（退出码 {code}），运行时长 {durationText}。{Environment.NewLine}{Environment.NewLine}是否打开日志目录？",
+                "游戏异常退出",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (choice == MessageBoxResult.Yes)
+            {
+                OpenLogFolder();
+            }
+        }
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalHours >= 1)
+        {
+            return $"{(int)duration.TotalHours} 小时 {duration.Minutes} 分";
+        }
+
+        if (duration.TotalMinutes >= 1)
+        {
+            return $"{duration.Minutes} 分 {duration.Seconds} 秒";
+        }
+
+        return $"{Math.Max(duration.Seconds, 1)} 秒";
+    }
+
+    private void MainWindow_Closing(object? sender, CancelEventArgs e)
+    {
+        if (_gameProcess is null || _gameProcess.HasExited || _closing)
+        {
+            _closing = true;
+            return;
+        }
+
+        MessageBoxResult choice = MessageBox.Show(
+            "游戏还在运行。退出启动器不会关闭游戏，确定退出吗？",
+            "Lx Launcher",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (choice == MessageBoxResult.Yes)
+        {
+            _closing = true;
+        }
+        else
+        {
+            e.Cancel = true;
+        }
     }
 
     // ---------- 启动失败 ----------
