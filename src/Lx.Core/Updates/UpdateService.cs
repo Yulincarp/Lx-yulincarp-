@@ -106,9 +106,10 @@ public static class UpdateService
         Directory.CreateDirectory(staging);
         ExtractSafely(zipPath, staging);
 
-        if (!File.Exists(Path.Combine(staging, "Lx.UI.exe")))
+        string exeName = AppInfo.ExecutableName;
+        if (!File.Exists(Path.Combine(staging, exeName)))
         {
-            throw new InvalidOperationException("更新包里没有 Lx.UI.exe");
+            throw new InvalidOperationException($"更新包里没有 {exeName}");
         }
 
         return new StagedUpdate(info.Version, zipPath, staging);
@@ -134,7 +135,8 @@ public static class UpdateService
                 $"-ProcessId {Environment.ProcessId} " +
                 $"-Source \"{update.StagingDir}\" " +
                 $"-Target \"{targetDir.TrimEnd(Path.DirectorySeparatorChar)}\" " +
-                $"-Backup \"{backup}\"",
+                $"-Backup \"{backup}\" " +
+                $"-ExeName \"{AppInfo.ExecutableName}\"",
         };
 
         return Process.Start(startInfo)
@@ -250,7 +252,8 @@ param(
     [int]$ProcessId,
     [string]$Source,
     [string]$Target,
-    [string]$Backup
+    [string]$Backup,
+    [string]$ExeName
 )
 
 $ErrorActionPreference = 'Stop'
@@ -261,16 +264,16 @@ try {
 }
 
 New-Item -ItemType Directory -Force -Path $Backup | Out-Null
-Copy-Item -LiteralPath (Join-Path $Target 'Lx.UI.exe') -Destination $Backup -Force -ErrorAction SilentlyContinue
+Copy-Item -LiteralPath (Join-Path $Target $ExeName) -Destination $Backup -Force -ErrorAction SilentlyContinue
 if (Test-Path (Join-Path $Target 'run.cmd')) {
     Copy-Item -LiteralPath (Join-Path $Target 'run.cmd') -Destination $Backup -Force -ErrorAction SilentlyContinue
 }
 
 try {
     Copy-Item -Path (Join-Path $Source '*') -Destination $Target -Recurse -Force
-    $env:DOTNET_BUNDLE_EXTRACT_BASE_DIR = Join-Path $env:LOCALAPPDATA 'Lx\bundle'
+    $env:DOTNET_BUNDLE_EXTRACT_BASE_DIR = Join-Path $env:LOCALAPPDATA 'Lx yulin carp\bundle'
 
-    $p = Start-Process -FilePath (Join-Path $Target 'Lx.UI.exe') -WorkingDirectory $Target -PassThru
+    $p = Start-Process -FilePath (Join-Path $Target $ExeName) -WorkingDirectory $Target -PassThru
     Start-Sleep -Seconds 5
     if ($p.HasExited) {
         throw '新版本启动后立即退出'
@@ -279,13 +282,13 @@ try {
     exit 0
 } catch {
     Set-Content -Path (Join-Path $Backup 'apply-error.txt') -Value $_.Exception.ToString() -Encoding UTF8
-    Copy-Item -LiteralPath (Join-Path $Backup 'Lx.UI.exe') -Destination $Target -Force -ErrorAction SilentlyContinue
+    Copy-Item -LiteralPath (Join-Path $Backup $ExeName) -Destination $Target -Force -ErrorAction SilentlyContinue
     if (Test-Path (Join-Path $Backup 'run.cmd')) {
         Copy-Item -LiteralPath (Join-Path $Backup 'run.cmd') -Destination $Target -Force -ErrorAction SilentlyContinue
     }
 
-    $env:DOTNET_BUNDLE_EXTRACT_BASE_DIR = Join-Path $env:LOCALAPPDATA 'Lx\bundle'
-    Start-Process -FilePath (Join-Path $Target 'Lx.UI.exe') -WorkingDirectory $Target | Out-Null
+    $env:DOTNET_BUNDLE_EXTRACT_BASE_DIR = Join-Path $env:LOCALAPPDATA 'Lx yulin carp\bundle'
+    Start-Process -FilePath (Join-Path $Target $ExeName) -WorkingDirectory $Target | Out-Null
     exit 1
 }
 """;

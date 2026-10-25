@@ -10,7 +10,7 @@ namespace Lx.UI;
 
 public partial class App : Application
 {
-    private const string InstanceName = @"Local\Lx.Launcher.SingleInstance";
+    private const string InstanceName = @"Local\Lx.YulinCarp.SingleInstance";
 
     private static bool _showingCrash;
     private SingleInstanceGuard? _instanceGuard;
@@ -31,7 +31,7 @@ public partial class App : Application
 
             if (!signaled)
             {
-                MessageBox.Show("Lx Launcher 已经在运行。", "Lx Launcher", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("Lx yulin carp 已经在运行。", "Lx yulin carp", MessageBoxButton.OK, MessageBoxImage.Information);
             }
 
             // 第二个实例没有状态要保存；窗口由第一个实例负责唤醒。
@@ -40,7 +40,7 @@ public partial class App : Application
         }
 
         Log.Initialize(Path.Combine(installRoot, "logs"));
-        Log.Info($"Lx Launcher {AppInfo.Version} 启动；数据目录 {installRoot}（{(AppPaths.IsPortable ? "便携模式" : "标准模式")}）");
+        Log.Info($"Lx yulin carp {AppInfo.Version} 启动；数据目录 {installRoot}（{(AppPaths.IsPortable ? "便携模式" : "标准模式")}）");
         ThemeManager.Apply(SettingsStore.Load(installRoot).Theme);
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
@@ -50,7 +50,7 @@ public partial class App : Application
         _activationThread = new Thread(ActivationLoop)
         {
             IsBackground = true,
-            Name = "Lx.Activation",
+            Name = "Lx.YulinCarp.Activation",
         };
         _activationThread.Start();
 
@@ -78,7 +78,7 @@ public partial class App : Application
             }
 
             _instanceGuard = null;
-            Log.Info($"Lx Launcher 退出，退出码 {e.ApplicationExitCode}");
+            Log.Info($"Lx yulin carp 退出，退出码 {e.ApplicationExitCode}");
         }
 
         base.OnExit(e);
@@ -168,7 +168,7 @@ public partial class App : Application
 
             MessageBoxResult result = MessageBox.Show(
                 text,
-                "Lx Launcher",
+                "Lx yulin carp",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Error);
 

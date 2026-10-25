@@ -19,6 +19,7 @@ using Lx.Probe.Modpacks;
 using Lx.Probe.Mods;
 using Lx.Probe.Resolve;
 using Lx.Probe.Updates;
+using Lx.UI.ViewModels;
 using Microsoft.Win32;
 using LxLog = Lx.Probe.Diagnostics.Log;
 
@@ -31,6 +32,7 @@ public partial class MainWindow : Window
 
     private List<ModFile> _allMods = new();
     private readonly ConcurrentQueue<DownloadFailure> _downloadFailures = new();
+    private readonly SettingsSummaryViewModel _settingsSummary = new();
     private bool _suppressInstanceEvents;
 
     private Process? _gameProcess;
@@ -54,6 +56,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        SettingsView.DataContext = _settingsSummary;
         SidebarVersionText.Text = $"v{AppInfo.Version}";
         Closing += MainWindow_Closing;
 
@@ -228,20 +231,7 @@ public partial class MainWindow : Window
     {
         LaunchSettings settings = SettingsStore.Load(_installRoot);
         Downloader.ConfigureProxy(settings.ProxyMode, settings.ProxyUrl);
-        var source = new DownloadSourceSettings(settings.DownloadSource, settings.CustomDownloadBase);
-        SettingsSummaryText.Text =
-            $"启动器版本：v{AppInfo.Version}{Environment.NewLine}" +
-            $"内存：{settings.MinMemoryMb}–{settings.MaxMemoryMb} MB{Environment.NewLine}" +
-            $"Java：{settings.JavaPath ?? "自动"}{Environment.NewLine}" +
-            $"JVM 参数：{settings.JvmArgs ?? "（默认）"}{Environment.NewLine}" +
-            $"窗口：{settings.WindowWidth}×{settings.WindowHeight}{(settings.Fullscreen ? " 全屏" : string.Empty)}{Environment.NewLine}" +
-            $"下载源：{DownloadUrlRewriter.Describe(source)}{Environment.NewLine}" +
-            $"并发：{settings.DownloadConcurrency}　代理：{settings.ProxyMode ?? "system"}{Environment.NewLine}" +
-            $"更新通道：{settings.UpdateChannel ?? "stable"}　主题：{settings.Theme ?? "light"}";
-        DataDirText.Text = $"数据目录：{_installRoot}";
-        CurseForgeKeyStatus.Text = CurseForgeClient.ResolveKey(_installRoot) is null
-            ? "未保存 Key"
-            : "已保存 Key（DPAPI 加密）";
+        _settingsSummary.Refresh(_installRoot);
     }
 
     private void SaveCurseForgeKey_Click(object sender, RoutedEventArgs e)
@@ -249,7 +239,7 @@ public partial class MainWindow : Window
         string key = CurseForgeKeyBox.Password.Trim();
         if (key.Length == 0)
         {
-            CurseForgeKeyStatus.Text = "先输入 API Key";
+            _settingsSummary.SetCurseForgeKeyStatus("先输入 API Key");
             CurseForgeKeyStatus.Foreground = Brushes.OrangeRed;
             return;
         }
@@ -258,13 +248,13 @@ public partial class MainWindow : Window
         {
             CurseForgeClient.SaveKey(_installRoot, key);
             CurseForgeKeyBox.Clear();
-            CurseForgeKeyStatus.Text = "已保存 Key（DPAPI 加密）";
+            _settingsSummary.SetCurseForgeKeyStatus("已保存 Key（DPAPI 加密）");
             CurseForgeKeyStatus.Foreground = Brushes.Gray;
             Log("CurseForge API Key 已保存");
         }
         catch (Exception ex)
         {
-            CurseForgeKeyStatus.Text = "保存失败";
+            _settingsSummary.SetCurseForgeKeyStatus("保存失败");
             CurseForgeKeyStatus.Foreground = Brushes.OrangeRed;
             LogError("保存 CurseForge API Key 失败", ex);
         }
@@ -1850,7 +1840,7 @@ public partial class MainWindow : Window
 
         MessageBoxResult choice = MessageBox.Show(
             "游戏还在运行。退出启动器不会关闭游戏，确定退出吗？",
-            "Lx Launcher",
+            "Lx yulin carp",
             MessageBoxButton.YesNo,
             MessageBoxImage.Question);
 
@@ -1934,7 +1924,7 @@ public partial class MainWindow : Window
     private string BuildFailureList()
     {
         var builder = new StringBuilder();
-        builder.AppendLine($"# Lx 下载失败清单 {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        builder.AppendLine($"# Lx yulin carp 下载失败清单 {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
         builder.AppendLine($"# 共 {_downloadFailures.Count} 条；格式：相对路径 <TAB> 原因 <TAB> URL");
         foreach (DownloadFailure failure in _downloadFailures)
         {

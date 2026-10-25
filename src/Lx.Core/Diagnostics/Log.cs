@@ -13,7 +13,7 @@ public static class Log
     private static readonly object Gate = new();
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
-    private static string _directory = Path.Combine(Path.GetTempPath(), "Lx", "logs");
+    private static string _directory = Path.Combine(Path.GetTempPath(), AppInfo.DataDirectoryName, "logs");
     private static string? _currentFile;
 
     public static string DirectoryPath => _directory;
@@ -51,10 +51,10 @@ public static class Log
         string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         if (localAppData.Length > 0)
         {
-            candidates.Add(Path.Combine(localAppData, "Lx", "logs"));
+            candidates.Add(Path.Combine(localAppData, AppInfo.DataDirectoryName, "logs"));
         }
 
-        candidates.Add(Path.Combine(Path.GetTempPath(), "Lx", "logs"));
+        candidates.Add(Path.Combine(Path.GetTempPath(), AppInfo.DataDirectoryName, "logs"));
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "logs"));
 
         foreach (string candidate in candidates)

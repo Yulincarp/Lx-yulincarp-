@@ -1,7 +1,7 @@
 <Window x:Class="Lx.UI.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Lx Launcher" Height="720" Width="1260" FontSize="13" Closing="MainWindow_Closing"
+        Title="Lx yulin carp" Height="720" Width="1260" FontSize="13" Closing="MainWindow_Closing"
         Background="{DynamicResource AppBackground}" Foreground="{DynamicResource TextPrimary}">
     <Grid Margin="14">
         <Grid.ColumnDefinitions>
@@ -10,7 +10,7 @@
         </Grid.ColumnDefinitions>
 
         <StackPanel Grid.Column="0" Margin="0,0,14,0">
-            <TextBlock Text="Lx Launcher" FontSize="18" FontWeight="Bold"/>
+            <TextBlock Text="Lx yulin carp" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
             <TextBlock x:Name="SidebarVersionText" Foreground="{DynamicResource TextSecondary}" Margin="0,2,0,18"/>
             <Button Content="首页" Click="Home_Click" HorizontalContentAlignment="Left" Padding="12,8" Margin="0,0,0,6"/>
             <Button Content="版本" Click="VersionPage_Click" HorizontalContentAlignment="Left" Padding="12,8" Margin="0,0,0,6"/>
@@ -316,8 +316,8 @@
 
                     <Border Grid.Row="1" Background="{DynamicResource PanelBackground}" CornerRadius="6" Padding="16" Margin="0,16,0,0">
                         <StackPanel>
-                            <TextBlock x:Name="SettingsSummaryText" FontSize="14" TextWrapping="Wrap"/>
-                            <TextBlock x:Name="DataDirText" Foreground="{DynamicResource TextSecondary}" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="SettingsSummaryText" FontSize="14" TextWrapping="Wrap" Text="{Binding Summary}"/>
+                            <TextBlock x:Name="DataDirText" Foreground="{DynamicResource TextSecondary}" Margin="0,8,0,0" TextWrapping="Wrap" Text="{Binding DataDirectory}"/>
                             <Button Content="打开设置…" Margin="0,14,0,0" Padding="14,5" HorizontalAlignment="Left"
                                     Click="Settings_Click"/>
                             <Separator Margin="0,16,0,10"/>
@@ -326,7 +326,7 @@
                                          HorizontalAlignment="Left" ToolTip="从 CurseForge 开发者控制台申请"/>
                             <WrapPanel Margin="0,8,0,0">
                                 <Button Content="保存 Key" Padding="14,4" Click="SaveCurseForgeKey_Click"/>
-                                <TextBlock x:Name="CurseForgeKeyStatus" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center"
+                                <TextBlock x:Name="CurseForgeKeyStatus" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Text="{Binding CurseForgeKeyStatus}"
                                            Margin="12,0,0,0"/>
                             </WrapPanel>
                             <TextBlock Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="0,6,0,0" FontSize="11"

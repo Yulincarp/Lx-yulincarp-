@@ -5,9 +5,13 @@ namespace Lx.Probe;
 // 版本号唯一来源：Directory.Build.props。发布脚本、启动参数、User-Agent 全从这里取。
 public static class AppInfo
 {
+    public const string ProductName = "Lx yulin carp";
+    public const string DataDirectoryName = "Lx yulin carp";
+    public const string ExecutableName = "Lx yulin carp.exe";
+
     public static string Version { get; } = Format(typeof(AppInfo).Assembly.GetName().Version);
 
-    public static string UserAgent => $"Lx-Launcher/{Version}";
+    public static string UserAgent => $"Lx-yulin-carp/{Version}";
 
     private static string Format(Version? version)
     {

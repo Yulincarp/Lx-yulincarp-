@@ -50,7 +50,7 @@ public class AppPathsTests
             Directory.CreateDirectory(app);
 
             string install = AppPaths.ResolveFor(app, appData);
-            Assert.Equal(Path.Combine(appData, "Lx"), install);
+            Assert.Equal(Path.Combine(appData, AppInfo.DataDirectoryName), install);
         }
         finally
         {

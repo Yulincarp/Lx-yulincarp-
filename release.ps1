@@ -34,7 +34,8 @@ if ($LASTEXITCODE -ne 0) {
     throw "publish.ps1 failed"
 }
 
-$out = Join-Path $root "dist\Lx-$version-$Runtime"
+$slug = "Lx-yulin-carp"
+$out = Join-Path $root "dist\$slug-$version-$Runtime"
 $zip = "$out.zip"
 if (-not (Test-Path $zip)) {
     throw "publish.ps1 did not create $zip"
@@ -46,18 +47,19 @@ $baseUrl = if ($Repo -and $Repo.Contains("/")) {
 } else {
     "https://example.invalid/Lx/releases/download/v$version"
 }
+$assetName = "$slug-$version-$Runtime.zip"
 
 if ([string]::IsNullOrWhiteSpace($Notes)) {
-    $Notes = "Lx Launcher v$version"
+    $Notes = "Lx yulin carp v$version"
 }
 
 $manifestName = if ($Channel -eq "beta") { "update-beta.json" } else { "update.json" }
 $manifest = [ordered]@{
     version = $version
-    url = "$baseUrl/Lx-$version-$Runtime.zip"
+    url = "$baseUrl/$assetName"
     sha256 = $hash
     notes = $Notes
-    minVersion = "0.3.0"
+    minVersion = "1.4.0"
     channel = $Channel
 } | ConvertTo-Json -Depth 5
 

@@ -1,7 +1,7 @@
 namespace Lx.Probe;
 
 // 数据根目录（libraries / assets / versions / logs / accounts.json 所在处）。
-// 顺序：LX_DATA_DIR 环境变量 -> exe 旁边的 portable.txt（data/）-> 开发期仓库 minecraft/ -> %APPDATA%\Lx。
+// 顺序：LX_DATA_DIR 环境变量 -> exe 旁边的 portable.txt（data/）-> 开发期仓库 minecraft/ -> %APPDATA%\Lx yulin carp。
 // 所有需要"数据放哪"的代码都走这里，别再各写一份。
 public static class AppPaths
 {
@@ -101,7 +101,7 @@ public static class AppPaths
 
         if (!string.IsNullOrWhiteSpace(appDataDir))
         {
-            return Path.Combine(appDataDir, "Lx");
+            return Path.Combine(appDataDir, AppInfo.DataDirectoryName);
         }
 
         return Path.Combine(baseDir, "data");

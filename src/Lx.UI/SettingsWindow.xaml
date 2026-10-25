@@ -1,7 +1,7 @@
 <Window x:Class="Lx.UI.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="设置" Height="640" Width="680"
+        Title="Lx yulin carp - 设置" Height="640" Width="680"
         Background="{DynamicResource AppBackground}" Foreground="{DynamicResource TextPrimary}"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
     <Grid Margin="20">
@@ -125,7 +125,7 @@
 
             <TabItem Header="关于">
                 <StackPanel Margin="14">
-                    <TextBlock Text="Lx Launcher" FontSize="22" FontWeight="Bold"/>
+                    <TextBlock Text="Lx yulin carp" FontSize="22" FontWeight="Bold"/>
                     <TextBlock x:Name="AboutVersionText" Foreground="{DynamicResource TextSecondary}" Margin="0,4,0,0"/>
                     <TextBlock x:Name="AboutRuntimeText" Foreground="{DynamicResource TextSecondary}" Margin="0,2,0,0"/>
                     <TextBlock Text="数据目录" FontWeight="Bold" Margin="0,18,0,6"/>

@@ -56,7 +56,7 @@ public class UpdateServiceTests
             string zip = Path.Combine(root, "pkg.zip");
             using (ZipArchive archive = ZipFile.Open(zip, ZipArchiveMode.Create))
             {
-                ZipArchiveEntry entry = archive.CreateEntry("Lx.UI.exe");
+                ZipArchiveEntry entry = archive.CreateEntry(AppInfo.ExecutableName);
                 using Stream stream = entry.Open();
                 stream.Write(new byte[] { 1, 2, 3, 4 });
             }
@@ -66,7 +66,7 @@ public class UpdateServiceTests
 
             StagedUpdate staged = await UpdateService.DownloadAsync(info, root);
 
-            Assert.True(File.Exists(Path.Combine(staged.StagingDir, "Lx.UI.exe")));
+            Assert.True(File.Exists(Path.Combine(staged.StagingDir, AppInfo.ExecutableName)));
             Assert.True(File.Exists(staged.ZipPath));
         }
         finally
