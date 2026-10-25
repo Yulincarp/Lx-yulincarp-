@@ -6,6 +6,14 @@ using Lx.Probe.Model;
 
 namespace Lx.Probe.Auth;
 
+// 站点明确返回 401/403：token 失效，需要重新登录。
+public sealed class YggdrasilSessionExpiredException : InvalidOperationException
+{
+    public YggdrasilSessionExpiredException(string message) : base(message)
+    {
+    }
+}
+
 // 外置登录（authlib-injector / Yggdrasil 协议），LittleSkin 这类站点都走这套。
 public static class YggdrasilAuth
 {
@@ -92,6 +100,30 @@ public static class YggdrasilAuth
             roles);
     }
 
+    // 启动前刷新一次 token；没有角色列表就原样返回，不做网络请求。
+    public static async Task<Account> RefreshAsync(Account account)
+    {
+        if (account.ApiRoot is null ||
+            account.AvailableRoles is null ||
+            account.AvailableRoles.Count == 0)
+        {
+            return account;
+        }
+
+        AccountRole? role = account.AvailableRoles.FirstOrDefault(item =>
+                              string.Equals(item.Name, account.Name, StringComparison.OrdinalIgnoreCase))
+                          ?? account.AvailableRoles.FirstOrDefault(item =>
+                              string.Equals(item.Id.Replace("-", string.Empty, StringComparison.Ordinal), account.Uuid, StringComparison.OrdinalIgnoreCase));
+
+        if (role is null)
+        {
+            return account;
+        }
+
+        string token = await RefreshTokenAsync(account.ApiRoot, account.AccessToken, role).ConfigureAwait(false);
+        return account with { AccessToken = token };
+    }
+
     // 用 refresh 把 token 重新绑定到指定角色（Yggdrasil 标准做法）。
     public static async Task<Account> SwitchRoleAsync(Account account, string roleName)
     {
@@ -146,6 +178,12 @@ public static class YggdrasilAuth
 
         if (!status.Equals(HttpStatusCode.OK))
         {
+            if (status is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+            {
+                throw new YggdrasilSessionExpiredException(
+                    $"外置登录已过期（{(int)status}），请重新登录；账号记录已保留");
+            }
+
             throw new InvalidOperationException($"切换角色失败（{(int)status}）：{DescribeError(body, status)}");
         }
 

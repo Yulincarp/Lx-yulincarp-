@@ -65,6 +65,41 @@ public static class LaunchPipeline
             throw new InvalidOperationException("微软登录已过期，请重新登录");
         }
 
+        if (string.Equals(account.Type, "yggdrasil", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                Account refreshed = await YggdrasilAuth.RefreshAsync(account).ConfigureAwait(false);
+                if (!string.Equals(refreshed.AccessToken, account.AccessToken, StringComparison.Ordinal))
+                {
+                    account = refreshed;
+
+                    try
+                    {
+                        AccountStore.Save(installRoot, account);
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        log($"[警告] 外置登录续期成功，但保存账号失败：{ex.Message}");
+                    }
+
+                    log("外置登录 token 已刷新");
+                }
+            }
+            catch (YggdrasilSessionExpiredException)
+            {
+                throw;
+            }
+            catch (InvalidOperationException ex)
+            {
+                log($"[警告] 外置登录 token 刷新失败，继续用本地 token：{ex.Message}");
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            {
+                log($"[警告] 外置登录站点连不上，继续用本地 token：{ex.Message}");
+            }
+        }
+
         if (!string.Equals(account.Type, "offline", StringComparison.OrdinalIgnoreCase) &&
             string.IsNullOrEmpty(account.AccessToken))
         {
