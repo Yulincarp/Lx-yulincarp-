@@ -24,7 +24,36 @@ public static class AppPaths
             TryMigrateLegacyData(root);
         }
 
-        return root;
+        return EnsureWritableRoot(root);
+    }
+
+    // 数据目录必须真的可写：%APPDATA% 被策略/沙箱拒绝时，退回 exe 旁边的 data。
+    private static string EnsureWritableRoot(string root)
+    {
+        try
+        {
+            Directory.CreateDirectory(root);
+            string probe = Path.Combine(root, ".write-test");
+            File.WriteAllText(probe, string.Empty);
+            File.Delete(probe);
+            return root;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 继续尝试 exe 旁边的 data
+        }
+
+        string fallback = Path.Combine(AppContext.BaseDirectory, "data");
+        try
+        {
+            Directory.CreateDirectory(fallback);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 彻底写不了就让上层在写文件时报错
+        }
+
+        return fallback;
     }
 
     private static void TryMigrateLegacyData(string target)

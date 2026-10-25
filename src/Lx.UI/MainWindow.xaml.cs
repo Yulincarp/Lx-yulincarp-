@@ -48,6 +48,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        SidebarVersionText.Text = $"v{AppInfo.Version}";
         Closing += MainWindow_Closing;
 
         if (Application.Current is { } app)
@@ -163,6 +164,33 @@ public partial class MainWindow : Window
         }
     }
 
+    private void Home_Click(object sender, RoutedEventArgs e)
+    {
+        HomeView.Visibility = Visibility.Visible;
+        ManageView.Visibility = Visibility.Collapsed;
+    }
+
+    private void Manage_Click(object sender, RoutedEventArgs e)
+    {
+        HomeView.Visibility = Visibility.Collapsed;
+        ManageView.Visibility = Visibility.Visible;
+    }
+
+    private void ShowLogs_Click(object sender, RoutedEventArgs e)
+    {
+        Manage_Click(sender, e);
+        LogBox.ScrollToEnd();
+    }
+
+    private void HomeInstance_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: Instance instance })
+        {
+            InstancesList.SelectedItem = instance;
+            ApplyInstance(instance);
+        }
+    }
+
     private void Settings_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new SettingsWindow(_installRoot) { Owner = this };
@@ -232,6 +260,7 @@ public partial class MainWindow : Window
         _suppressInstanceEvents = true;
         List<Instance> instances = InstanceStore.Load(_installRoot);
         InstancesList.ItemsSource = instances;
+        HomeInstances.ItemsSource = instances;
         Instance? target = selectName is null
             ? instances.FirstOrDefault()
             : instances.FirstOrDefault(i => i.Name == selectName) ?? instances.FirstOrDefault();
@@ -1026,6 +1055,124 @@ public partial class MainWindow : Window
                 LaunchButton.Content = "游戏运行中…";
                 LaunchButton.IsEnabled = false;
             }
+        }
+    }
+
+    private async void Repair_Click(object sender, RoutedEventArgs e)
+    {
+        if (_launchCts is not null)
+        {
+            Log("正在启动/校验，等当前任务结束");
+            return;
+        }
+
+        if (_gameProcess is { } running && !running.HasExited)
+        {
+            Log("游戏运行中，先退出游戏再校验文件");
+            return;
+        }
+
+        if (VersionBox.SelectedItem is not ManifestVersion version || version.Id is null)
+        {
+            Log("先选一个版本");
+            return;
+        }
+
+        if (IsForgeSelected)
+        {
+            Log("Forge/NeoForge 请先安装，选生成的版本、加载器切回原版后再校验");
+            return;
+        }
+
+        string? loader = IsFabricSelected ? "fabric" : null;
+        string? loaderVersion = IsFabricSelected ? (LoaderVersionBox.SelectedItem as LoaderChoice)?.Version : null;
+        if (IsFabricSelected && string.IsNullOrEmpty(loaderVersion))
+        {
+            Log("Fabric 版本列表还没加载好，等下拉框里有版本再校验");
+            return;
+        }
+
+        string? gameDir = InstancesList.SelectedItem is Instance selected
+            ? InstanceStore.DirFor(_installRoot, selected.Name)
+            : null;
+
+        var cts = new CancellationTokenSource();
+        _launchCts = cts;
+        _launchStartedAt = DateTime.Now;
+        _downloadFailures.Clear();
+        CopyFailuresButton.IsEnabled = false;
+        CopyFailuresButton.Content = "复制失败清单";
+        RepairButton.IsEnabled = false;
+        LaunchButton.Content = "取消";
+        LaunchButton.IsEnabled = true;
+        StatusText.Text = "校验中…";
+        Progress.Value = 0;
+        Progress.Maximum = 1;
+
+        try
+        {
+            var account = new Account("offline", "Repair", new string('0', 32), "0", null);
+            var options = new LaunchOptions(_installRoot, version.Id, loader, loaderVersion, gameDir, account);
+
+            var progress = new Progress<LaunchProgress>(p =>
+            {
+                if (!ReferenceEquals(_launchCts, cts) || cts.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                Progress.Maximum = Math.Max(p.Total, 1);
+                Progress.Value = p.Done;
+                StatusText.Text = $"{p.Stage} {p.Done}/{p.Total}";
+            });
+
+            Action<DownloadFailure> onFailure = failure => _downloadFailures.Enqueue(failure);
+
+            await LaunchPipeline.RunAsync(
+                options,
+                message => Dispatcher.Invoke(() => Log(message)),
+                progress,
+                onFailure,
+                cts.Token,
+                downloadOnly: true);
+
+            int failureCount = _downloadFailures.Count;
+            if (failureCount > 0)
+            {
+                CopyFailuresButton.IsEnabled = true;
+                CopyFailuresButton.Content = $"复制失败清单 ({failureCount})";
+                StatusText.Text = $"校验完成：仍有 {failureCount} 个文件失败";
+                Log($"[警告] 校验/修复完成，仍有 {failureCount} 个文件失败");
+            }
+            else
+            {
+                Progress.Value = Progress.Maximum;
+                StatusText.Text = "校验完成：文件完整";
+                Log("校验/修复完成：文件完整");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText.Text = "已取消";
+            Log("已取消校验/修复");
+        }
+        catch (Exception ex)
+        {
+            LogError("校验/修复失败", ex);
+            StatusText.Text = "校验失败";
+            ShowFailureActions(ex);
+        }
+        finally
+        {
+            if (ReferenceEquals(_launchCts, cts))
+            {
+                _launchCts = null;
+            }
+
+            cts.Dispose();
+            RepairButton.IsEnabled = true;
+            LaunchButton.Content = _gameProcess is null ? "启动游戏" : "游戏运行中…";
+            LaunchButton.IsEnabled = _gameProcess is null;
         }
     }
 

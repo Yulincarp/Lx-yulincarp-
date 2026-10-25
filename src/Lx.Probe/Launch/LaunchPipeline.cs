@@ -39,7 +39,8 @@ public static class LaunchPipeline
         Action<string> log,
         IProgress<LaunchProgress>? progress = null,
         Action<DownloadFailure>? onDownloadFailure = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool downloadOnly = false)
     {
         string installRoot = options.InstallRoot;
         Account account = options.Account;
@@ -210,6 +211,13 @@ public static class LaunchPipeline
         string gameRoot = options.GameDir is not null
             ? Path.GetFullPath(options.GameDir)
             : Path.Combine(installRoot, "versions", versionId);
+
+        // 校验/修复模式：只准备文件和体检，不拼 Java 命令行、不启动游戏。
+        if (downloadOnly)
+        {
+            return new LaunchResult(versionId, gameRoot, string.Empty, manifestItems.Count, assets.Count, string.Empty);
+        }
+
         string librariesDir = Path.Combine(installRoot, "libraries");
         string clientVersionId = version.InheritsFrom ?? versionId;
         string clientJar = Path.Combine(installRoot, "versions", clientVersionId, clientVersionId + ".jar");
