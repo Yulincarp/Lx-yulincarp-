@@ -41,6 +41,14 @@ if (-not (Test-Path $zip)) {
     throw "publish.ps1 did not create $zip"
 }
 
+$setup = Join-Path $root "dist\Lx-yulin-carp-$version-Setup.exe"
+Write-Host "Building Setup.exe..."
+dotnet build "tools\Lx.Setup\Lx.Setup.csproj" -c Release --nologo
+if ($LASTEXITCODE -ne 0) {
+    throw "Setup build failed"
+}
+Copy-Item "tools\Lx.Setup\bin\Release\net48\Lx-yulin-carp-1.4.0-Setup.exe" $setup -Force
+
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
 $baseUrl = if ($Repo -and $Repo.Contains("/")) {
     "https://github.com/$Repo/releases/download/v$version"
@@ -68,5 +76,6 @@ $manifestPath = Join-Path $root "dist\$manifestName"
 
 Write-Host "Version: $version"
 Write-Host "ZIP: $zip"
+Write-Host "SETUP: $setup"
 Write-Host "SHA256: $hash"
 Write-Host "Manifest: $manifestPath"

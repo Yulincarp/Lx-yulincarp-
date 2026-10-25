@@ -245,11 +245,11 @@
                             <Button Content="备份目录" Click="OpenModBackup_Click" Padding="10,3" Margin="0,0,8,0"/>
                             <Button Content="OptiFabric" Click="InstallOptiFabric_Click" Padding="10,3"/>
                         </WrapPanel>
-                        <TextBlock x:Name="ModsPathText" Foreground="{DynamicResource TextSecondary}" FontSize="11"
+                        <TextBlock x:Name="ModsPathText" Text="{Binding ModsDirectory}" Foreground="{DynamicResource TextSecondary}" FontSize="11"
                                    Margin="0,8,0,0" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
 
-                    <ListView Grid.Row="3" x:Name="ModsList" BorderThickness="0">
+                    <ListView Grid.Row="3" x:Name="ModsList" BorderThickness="0" ItemsSource="{Binding Mods}">
                         <ListView.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
@@ -318,8 +318,12 @@
                         <StackPanel>
                             <TextBlock x:Name="SettingsSummaryText" FontSize="14" TextWrapping="Wrap" Text="{Binding Summary}"/>
                             <TextBlock x:Name="DataDirText" Foreground="{DynamicResource TextSecondary}" Margin="0,8,0,0" TextWrapping="Wrap" Text="{Binding DataDirectory}"/>
-                            <Button Content="打开设置…" Margin="0,14,0,0" Padding="14,5" HorizontalAlignment="Left"
-                                    Click="Settings_Click"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                                <Button Content="打开设置…" Padding="14,5" Click="Settings_Click"/>
+                                <Button Content="从旧版导入数据…" Margin="10,0,0,0" Padding="14,5"
+                                        Click="MigrateOldData_Click"
+                                        ToolTip="把旧版 minecraft 或 %APPDATA%\Lx 的数据复制到当前数据目录；不覆盖已有文件"/>
+                            </StackPanel>
                             <Separator Margin="0,16,0,10"/>
                             <TextBlock Text="CurseForge API Key" FontWeight="SemiBold"/>
                             <PasswordBox x:Name="CurseForgeKeyBox" Width="460" Height="28" Margin="0,8,0,0"

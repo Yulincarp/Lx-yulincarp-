@@ -30,6 +30,7 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 ```text
 dist\Lx-yulin-carp-1.4.0-win-x64\
 dist\Lx-yulin-carp-1.4.0-win-x64.zip
+dist\Lx-yulin-carp-1.4.0-Setup.exe
 dist\update.json
 ```
 
@@ -64,6 +65,7 @@ git push origin v1.4.0
 工作流会上传：
 
 - `Lx-yulin-carp-1.4.0-win-x64.zip`
+- `Lx-yulin-carp-1.4.0-Setup.exe`
 - `update.json`
 
 ## 4. 自更新地址

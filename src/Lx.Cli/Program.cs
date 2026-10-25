@@ -5,6 +5,7 @@ using Lx.Probe.Instances;
 using Lx.Probe.Launch;
 using Lx.Probe.Loaders;
 using Lx.Probe.Model;
+using Lx.Probe.Migration;
 using Lx.Probe.Modpacks;
 using Lx.Probe.Mods;
 using Lx.Probe.Resolve;
@@ -25,6 +26,7 @@ string? gameDirArg = null;
 string? modsAction = null;
 string? modsTarget = null;
 string? importArg = null;
+string? migrateDataArg = null;
 string? cfKeyArg = null;
 string? installLoaderArg = null;
 string? artifactSourceArg = null;
@@ -36,6 +38,7 @@ bool listOnly = false;
 bool listAccounts = false;
 bool debug = false;
 bool relogin = false;
+bool migrateOverwrite = false;
 
 for (int i = 0; i < args.Length; i++)
 {
@@ -67,6 +70,14 @@ for (int i = 0; i < args.Length; i++)
     else if (arg == "--import" && i + 1 < args.Length)
     {
         importArg = args[++i];
+    }
+    else if (arg == "--migrate-data" && i + 1 < args.Length)
+    {
+        migrateDataArg = args[++i];
+    }
+    else if (arg == "--migrate-overwrite")
+    {
+        migrateOverwrite = true;
     }
     else if (arg == "--cf-key" && i + 1 < args.Length)
     {
@@ -144,6 +155,33 @@ for (int i = 0; i < args.Length; i++)
 
 string installRoot = Path.GetFullPath(rootArg ?? AppPaths.ResolveInstallRoot());
 string versionId = versionArg ?? "1.20.4";
+
+if (migrateDataArg is not null)
+{
+    try
+    {
+        var progress = new Progress<DataMigrationProgress>(p =>
+            Console.WriteLine($"  {p.FilesCopied} 个文件 / {p.BytesCopied / 1024.0 / 1024.0:F1} MB"));
+        DataMigrationResult migration = await DataMigrationService.MigrateAsync(
+            migrateDataArg,
+            installRoot,
+            migrateOverwrite,
+            progress);
+
+        Console.WriteLine($"迁移完成：复制 {migration.FilesCopied}，跳过 {migration.FilesSkipped}，共 {migration.BytesCopied / 1024.0 / 1024.0:F1} MB");
+        foreach (string error in migration.Errors.Take(10))
+        {
+            Console.WriteLine($"[失败] {error}");
+        }
+
+        return migration.Errors.Count == 0 ? 0 : 1;
+    }
+    catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
+    {
+        Console.WriteLine($"[错误] {ex.Message}");
+        return 1;
+    }
+}
 
 if (installLoaderArg is not null)
 {

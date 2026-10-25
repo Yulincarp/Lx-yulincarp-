@@ -15,6 +15,7 @@ using Lx.Probe.Instances;
 using Lx.Probe.Loaders;
 using Lx.Probe.Launch;
 using Lx.Probe.Model;
+using Lx.Probe.Migration;
 using Lx.Probe.Modpacks;
 using Lx.Probe.Mods;
 using Lx.Probe.Resolve;
@@ -30,9 +31,9 @@ public partial class MainWindow : Window
     // 从 bin 目录往上找 Lx.sln，把 minecraft 定位到仓库根，避免"从哪个目录启动"影响结果。
     private readonly string _installRoot = AppPaths.ResolveInstallRoot();
 
-    private List<ModFile> _allMods = new();
     private readonly ConcurrentQueue<DownloadFailure> _downloadFailures = new();
     private readonly SettingsSummaryViewModel _settingsSummary = new();
+    private readonly ResourceViewModel _resourceViewModel = new();
     private bool _suppressInstanceEvents;
 
     private Process? _gameProcess;
@@ -57,6 +58,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         SettingsView.DataContext = _settingsSummary;
+        ResourceView.DataContext = _resourceViewModel;
         SidebarVersionText.Text = $"v{AppInfo.Version}";
         Closing += MainWindow_Closing;
 
@@ -225,6 +227,85 @@ public partial class MainWindow : Window
         }
 
         RefreshSettingsSummary();
+    }
+
+    private async void MigrateOldData_Click(object sender, RoutedEventArgs e)
+    {
+        if (_gameProcess is { } running && !running.HasExited)
+        {
+            Log("游戏运行中，先退出游戏再迁移数据");
+            return;
+        }
+
+        string? guessed = DataMigrationService.GuessOldDataRoot();
+        var dialog = new OpenFolderDialog
+        {
+            Title = "选择旧版 Lx 数据目录（minecraft 或 %APPDATA%\\Lx）",
+            InitialDirectory = guessed ?? Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        string source = dialog.FolderName;
+        if (!DataMigrationService.IsLikelyDataRoot(source))
+        {
+            MessageBox.Show(
+                "这个目录不像 Lx 数据目录。\n\n应包含 accounts.json、versions、libraries 或 assets。",
+                "数据迁移",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        MessageBoxResult confirm = MessageBox.Show(
+            $"把旧数据复制到：{_installRoot}\n\n源目录：{source}\n\n已存在的文件会跳过，不会覆盖。现在开始吗？",
+            "从旧版导入数据",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        StatusText.Text = "正在迁移旧数据…";
+        var progress = new Progress<DataMigrationProgress>(p =>
+        {
+            StatusText.Text = $"迁移 {p.FilesCopied} 个文件 / {p.BytesCopied / 1024.0 / 1024.0:F1} MB";
+        });
+
+        try
+        {
+            DataMigrationResult result = await DataMigrationService.MigrateAsync(
+                source,
+                _installRoot,
+                overwrite: false,
+                progress);
+
+            string summary = $"迁移完成：复制 {result.FilesCopied} 个文件，跳过 {result.FilesSkipped} 个，共 {result.BytesCopied / 1024.0 / 1024.0:F1} MB。";
+            Log(summary);
+            foreach (string error in result.Errors.Take(8))
+            {
+                Log($"[迁移失败] {error}");
+            }
+
+            if (result.Errors.Count > 0)
+            {
+                summary += $"\n\n有 {result.Errors.Count} 个文件失败（可能被占用），详情见日志。";
+            }
+
+            summary += "\n\n设置/账号/实例要重启启动器后才会重新加载。";
+            MessageBox.Show(summary, "数据迁移", MessageBoxButton.OK,
+                result.Errors.Count == 0 ? MessageBoxImage.Information : MessageBoxImage.Warning);
+            StatusText.Text = "旧数据迁移完成，重启后生效";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = "数据迁移失败";
+            LogError("数据迁移失败", ex);
+        }
     }
 
     private void RefreshSettingsSummary()
@@ -831,11 +912,7 @@ public partial class MainWindow : Window
 
         try
         {
-            string gameDir = CurrentGameDir();
-            Directory.CreateDirectory(ModManager.ModsDir(gameDir));
-            ModsPathText.Text = ModManager.ModsDir(gameDir);
-            _allMods = ModManager.List(gameDir);
-            ApplyModFilter();
+            _resourceViewModel.Load(CurrentGameDir());
         }
         catch (Exception ex)
         {
@@ -843,36 +920,20 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ModSearch_Changed(object sender, TextChangedEventArgs e) => ApplyModFilter();
-
-    private void ModSort_Changed(object sender, SelectionChangedEventArgs e) => ApplyModFilter();
-
-    private void ApplyModFilter()
+    private void ModSearch_Changed(object sender, TextChangedEventArgs e)
     {
-        if (ModsList is null)
+        if (ModSearch is not null)
         {
-            return;
+            _resourceViewModel.Search = ModSearch.Text;
         }
+    }
 
-        string query = ModSearch?.Text?.Trim() ?? string.Empty;
-        IEnumerable<ModFile> filtered = _allMods;
-
-        if (query.Length > 0)
+    private void ModSort_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (ModSort is not null)
         {
-            filtered = filtered.Where(mod =>
-                mod.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                mod.FileName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                (mod.Id ?? string.Empty).Contains(query, StringComparison.OrdinalIgnoreCase));
+            _resourceViewModel.SortIndex = ModSort.SelectedIndex;
         }
-
-        filtered = (ModSort?.SelectedIndex ?? 0) switch
-        {
-            1 => filtered.OrderBy(mod => mod.FileName, StringComparer.OrdinalIgnoreCase),
-            2 => filtered.OrderByDescending(mod => mod.Enabled).ThenBy(mod => mod.DisplayName, StringComparer.OrdinalIgnoreCase),
-            _ => filtered.OrderBy(mod => mod.DisplayName, StringComparer.OrdinalIgnoreCase),
-        };
-
-        ModsList.ItemsSource = filtered.ToList();
     }
 
     private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
@@ -1065,8 +1126,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        ModManager.SetEnabled(CurrentGameDir(), mod.FileName, box.IsChecked == true);
-        RefreshMods();
+        _resourceViewModel.SetEnabled(mod, box.IsChecked == true);
     }
 
     private void AddMod_Click(object sender, RoutedEventArgs e)
@@ -1110,10 +1170,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (ModManager.Remove(CurrentGameDir(), mod.FileName))
+        if (_resourceViewModel.Remove(mod))
         {
             Log($"已删除 mod：{mod.FileName}");
-            RefreshMods();
         }
     }
 

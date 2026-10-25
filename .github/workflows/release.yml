@@ -25,11 +25,13 @@ jobs:
           name: Lx-${{ github.ref_name }}
           path: |
             dist/Lx-*-win-x64.zip
+            dist/Lx-*-Setup.exe
             dist/update*.json
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/Lx-*-win-x64.zip
+            dist/Lx-*-Setup.exe
             dist/update*.json
           generate_release_notes: true
