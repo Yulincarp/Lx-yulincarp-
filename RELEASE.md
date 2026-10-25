@@ -5,10 +5,10 @@
 唯一来源：`Directory.Build.props`
 
 ```xml
-<Version>0.4.0</Version>
-<AssemblyVersion>0.4.0.0</AssemblyVersion>
-<FileVersion>0.4.0.0</FileVersion>
-<InformationalVersion>0.4.0</InformationalVersion>
+<Version>1.4.0</Version>
+<AssemblyVersion>1.4.0.0</AssemblyVersion>
+<FileVersion>1.4.0.0</FileVersion>
+<InformationalVersion>1.4.0</InformationalVersion>
 ```
 
 不要在其他地方写死版本号。
@@ -28,8 +28,8 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 产物：
 
 ```text
-dist\Lx-0.4.0-win-x64\
-dist\Lx-0.4.0-win-x64.zip
+dist\Lx-yulin-carp-1.4.0-win-x64\
+dist\Lx-yulin-carp-1.4.0-win-x64.zip
 dist\update.json
 ```
 
@@ -57,13 +57,13 @@ beta 通道：
 发版：
 
 ```powershell
-git tag v0.4.0
-git push origin v0.4.0
+git tag v1.4.0
+git push origin v1.4.0
 ```
 
 工作流会上传：
 
-- `Lx-0.4.0-win-x64.zip`
+- `Lx-yulin-carp-1.4.0-win-x64.zip`
 - `update.json`
 
 ## 4. 自更新地址
@@ -77,7 +77,7 @@ git push origin v0.4.0
 把 `update.json` 里的 `url` 指向 Release 资产即可。GitHub Release 资产地址形如：
 
 ```text
-https://github.com/OWNER/REPO/releases/download/v0.4.0/Lx-0.4.0-win-x64.zip
+https://github.com/OWNER/REPO/releases/download/v1.4.0/Lx-yulin-carp-1.4.0-win-x64.zip
 ```
 
 ## 5. 代码签名
@@ -86,7 +86,7 @@ https://github.com/OWNER/REPO/releases/download/v0.4.0/Lx-0.4.0-win-x64.zip
 
 ```powershell
 signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 ^
-  /f cert.pfx /p "$env:CERT_PASSWORD" dist\Lx-0.4.0-win-x64\Lx.UI.exe
+  /f cert.pfx /p "$env:CERT_PASSWORD" "dist\Lx-yulin-carp-1.4.0-win-x64\Lx yulin carp.exe"
 ```
 
 签名后再重新压缩 zip、重新计算 `update.json` 的 sha256。
@@ -95,8 +95,8 @@ signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 ^
 
 - [ ] `dotnet test` 全绿
 - [ ] 干净 Windows 解压 zip 能启动
-- [ ] 首次启动数据目录正确（`%APPDATA%\Lx` 或 portable `data`）
-- [ ] 自更新 0.3.x → 0.4.0 成功、失败能回滚
+- [ ] 首次启动数据目录正确（`%APPDATA%\Lx yulin carp` 或 portable `data`）
+- [ ] 自更新 0.3.x → 1.4.0 成功、失败能回滚
 - [ ] 实例/账号/设置不丢
 - [ ] `update.json` 的 sha256 与 zip 一致
 - [ ] Release notes 写清破坏性变更
