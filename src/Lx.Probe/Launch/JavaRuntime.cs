@@ -15,7 +15,7 @@ public static class JavaRuntime
 
     static JavaRuntime()
     {
-        Http.DefaultRequestHeaders.UserAgent.ParseAdd("Lx-Launcher/0.1");
+        Http.DefaultRequestHeaders.UserAgent.ParseAdd(AppInfo.UserAgent);
     }
 
     public static async Task<string> EnsureJavaAsync(

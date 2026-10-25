@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Lx.Probe;
 using Lx.Probe.Auth;
 using Lx.Probe.Instances;
 using Lx.Probe.Launch;
@@ -141,7 +142,7 @@ for (int i = 0; i < args.Length; i++)
     }
 }
 
-string installRoot = Path.GetFullPath(rootArg ?? "minecraft");
+string installRoot = Path.GetFullPath(rootArg ?? AppPaths.ResolveInstallRoot());
 string versionId = versionArg ?? "1.20.4";
 
 if (installLoaderArg is not null)

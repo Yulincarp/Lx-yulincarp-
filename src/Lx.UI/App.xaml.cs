@@ -39,7 +39,7 @@ public partial class App : Application
         }
 
         Log.Initialize(Path.Combine(installRoot, "logs"));
-        Log.Info($"Lx Launcher {typeof(App).Assembly.GetName().Version} 启动；安装目录 {installRoot}");
+        Log.Info($"Lx Launcher {AppInfo.Version} 启动；数据目录 {installRoot}（{(AppPaths.IsPortable ? "便携模式" : "标准模式")}）");
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;

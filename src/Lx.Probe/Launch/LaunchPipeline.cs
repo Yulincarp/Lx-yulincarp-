@@ -243,7 +243,7 @@ public static class LaunchPipeline
             ["version_type"] = "release",
             ["natives_directory"] = nativesDir,
             ["launcher_name"] = "lx",
-            ["launcher_version"] = "0.1",
+            ["launcher_version"] = AppInfo.Version,
             ["classpath"] = string.Join(";", classpath),
             ["library_directory"] = librariesDir,
             ["classpath_separator"] = ";",

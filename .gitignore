@@ -492,6 +492,10 @@ official-cmd.txt
 launch-*.log
 ui-screenshot.png
 
+# 发布产物
+dist/
+
+
 automodpack/
 config/
 logs/

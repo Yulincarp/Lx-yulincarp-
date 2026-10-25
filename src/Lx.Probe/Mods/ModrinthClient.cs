@@ -27,7 +27,7 @@ public static class ModrinthClient
     private static HttpClient CreateHttp()
     {
         var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("Lx-Launcher/0.1 (local test)");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd(AppInfo.UserAgent + " (local test)");
         return client;
     }
 

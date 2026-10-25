@@ -84,7 +84,7 @@ public partial class MainWindow : Window
             RefreshAccounts();
             RefreshInstances();
 
-            Log($"安装目录：{_installRoot}");
+            Log($"数据目录：{_installRoot}");
             Log($"下载源：{DownloadUrlRewriter.Describe(source)}");
             Log($"版本清单：{versions.Count} 个");
             Log($"日志：{LxLog.CurrentFile ?? LxLog.DirectoryPath}");

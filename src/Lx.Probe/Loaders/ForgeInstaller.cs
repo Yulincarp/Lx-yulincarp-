@@ -27,7 +27,7 @@ public static class ForgeInstaller
 
     static ForgeInstaller()
     {
-        Http.DefaultRequestHeaders.UserAgent.ParseAdd("Lx-Launcher/0.1");
+        Http.DefaultRequestHeaders.UserAgent.ParseAdd(AppInfo.UserAgent);
     }
 
     // 给界面用：列出某个 Minecraft 版本可用的 Forge 版本（完整坐标，如 1.20.1-47.2.0，新到旧）。
