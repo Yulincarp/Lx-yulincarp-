@@ -1,11 +1,22 @@
 using System.IO.Compression;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace Lx.Probe.Mods;
 
 // 一个 mod 文件（.jar 或 .jar.disabled）。
-public sealed record ModFile(string FileName, string? Id, string? Name, string? Version, bool Enabled, long Size)
+// Dependencies 目前来自 fabric.mod.json 的 depends；Forge/NeoForge 只读 id/name/version。
+public sealed record ModFile(
+    string FileName,
+    string? Id,
+    string? Name,
+    string? Version,
+    bool Enabled,
+    long Size,
+    string? Loader = null,
+    IReadOnlyList<string>? Dependencies = null)
 {
     public string DisplayName => string.IsNullOrEmpty(Name) ? FileName : Name!;
 }
@@ -38,8 +49,8 @@ public static class ModManager
                 continue;
             }
 
-            (string? id, string? name, string? version) = ReadMetadata(path);
-            result.Add(new ModFile(fileName, id, name, version, !disabled, new FileInfo(path).Length));
+            (string? id, string? name, string? version, string? loader, List<string>? dependencies) = ReadMetadata(path);
+            result.Add(new ModFile(fileName, id, name, version, !disabled, new FileInfo(path).Length, loader, dependencies));
         }
 
         return result;
@@ -115,28 +126,72 @@ public static class ModManager
             });
     }
 
-    // 从 jar 里的 fabric.mod.json 读 id/name/version；读不到就返回 null，不影响列表。
-    private static (string? Id, string? Name, string? Version) ReadMetadata(string path)
+    // 从 jar 里读 metadata：Fabric 优先 fabric.mod.json，Forge/NeoForge 读 mods.toml。
+    private static (string? Id, string? Name, string? Version, string? Loader, List<string>? Dependencies) ReadMetadata(string path)
     {
         try
         {
             using ZipArchive zip = ZipFile.OpenRead(path);
-            ZipArchiveEntry? entry = zip.GetEntry("fabric.mod.json");
-            if (entry is null)
+
+            ZipArchiveEntry? fabric = FindEntry(zip, "fabric.mod.json");
+            if (fabric is not null)
             {
-                return (null, null, null);
+                using Stream stream = fabric.Open();
+                JsonNode? node = JsonNode.Parse(stream);
+                List<string>? dependencies = null;
+                if (node?["depends"] is JsonObject depends)
+                {
+                    dependencies = depends.Select(pair => pair.Key).ToList();
+                }
+
+                return (
+                    node?["id"]?.GetValue<string>(),
+                    node?["name"]?.GetValue<string>(),
+                    node?["version"]?.GetValue<string>(),
+                    "fabric",
+                    dependencies);
             }
 
-            using Stream stream = entry.Open();
-            JsonNode? node = JsonNode.Parse(stream);
-            return (
-                node?["id"]?.GetValue<string>(),
-                node?["name"]?.GetValue<string>(),
-                node?["version"]?.GetValue<string>());
+            ZipArchiveEntry? neoforge = FindEntry(zip, "META-INF/neoforge.mods.toml");
+            ZipArchiveEntry? forge = FindEntry(zip, "META-INF/mods.toml");
+            ZipArchiveEntry? toml = neoforge ?? forge;
+            if (toml is not null)
+            {
+                using Stream stream = toml.Open();
+                using var reader = new StreamReader(stream, Encoding.UTF8);
+                string text = reader.ReadToEnd();
+                string? version = MatchToml(text, "version");
+                if (version is not null && version.StartsWith("${", StringComparison.Ordinal))
+                {
+                    version = null;
+                }
+
+                return (
+                    MatchToml(text, "modId"),
+                    MatchToml(text, "displayName"),
+                    version,
+                    neoforge is not null ? "neoforge" : "forge",
+                    null);
+            }
+
+            return (null, null, null, null, null);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or JsonException)
         {
-            return (null, null, null);
+            return (null, null, null, null, null);
         }
+    }
+
+    private static ZipArchiveEntry? FindEntry(ZipArchive zip, string name) =>
+        zip.Entries.FirstOrDefault(entry =>
+            string.Equals(entry.FullName, name, StringComparison.OrdinalIgnoreCase));
+
+    private static string? MatchToml(string text, string key)
+    {
+        Match match = Regex.Match(
+            text,
+            "^\\s*" + Regex.Escape(key) + "\\s*=\\s*\"([^\"]+)\"",
+            RegexOptions.Multiline);
+        return match.Success ? match.Groups[1].Value : null;
     }
 }

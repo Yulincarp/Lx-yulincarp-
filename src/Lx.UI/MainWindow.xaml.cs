@@ -39,6 +39,7 @@ public partial class MainWindow : Window
     private DateTime _launchStartedAt;
     private bool _closing;
     private bool _modrinthBusy;
+    private bool _updatingMods;
 
     private sealed record LoaderChoice(string Version, string Display, bool Stable = false);
 
@@ -779,84 +780,185 @@ public partial class MainWindow : Window
 
     private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
     {
+        if (_updatingMods)
+        {
+            Log("正在更新 mod，等它完成");
+            return;
+        }
+
+        if (_modrinthBusy || _launchCts is not null || (_gameProcess is { } game && !game.HasExited))
+        {
+            Log("先等启动/游戏/在线安装结束再检查 mod 更新");
+            return;
+        }
+
+        if (!TryGetModContext(out string gameVersion, out string loader))
+        {
+            return;
+        }
+
         string gameDir = CurrentGameDir();
         List<ModFile> enabled = ModManager.List(gameDir).Where(mod => mod.Enabled).ToList();
         if (enabled.Count == 0)
         {
+            StatusText.Text = "没有启用的 mod";
             Log("没有启用的 mod");
             return;
         }
 
-        string version = (VersionBox.SelectedItem as ManifestVersion)?.Id ?? "1.20.4";
-        const string loader = "fabric"; // 目前只有 Fabric 有 mod
+        _updatingMods = true;
+        CheckUpdatesButton.IsEnabled = false;
+        ScanConflictsButton.IsEnabled = false;
+        StatusText.Text = "检查 mod 更新…";
         var updates = new List<ModUpdate>();
 
-        foreach (ModFile mod in enabled)
+        try
         {
-            string path = Path.Combine(ModManager.ModsDir(gameDir), mod.FileName);
-            try
+            foreach (ModFile mod in enabled)
             {
-                ModUpdate? update = await ModrinthClient.CheckAsync(path, version, loader);
-                if (update is null)
+                string path = Path.Combine(ModManager.ModsDir(gameDir), mod.FileName);
+                try
                 {
-                    Log($"[最新] {mod.DisplayName} {mod.Version}");
-                    continue;
+                    ModUpdate? update = await ModrinthClient.CheckAsync(path, gameVersion, loader);
+                    if (update is null)
+                    {
+                        Log($"[最新] {mod.DisplayName} {mod.Version}");
+                        continue;
+                    }
+
+                    updates.Add(update);
+                    Log($"[可更新] {update.ProjectTitle} {update.CurrentVersion} → {update.LatestVersion}");
                 }
-
-                updates.Add(update);
-                Log($"[可更新] {update.ProjectTitle} {update.CurrentVersion} → {update.LatestVersion}");
+                catch (Exception ex)
+                {
+                    LogError($"检查 {mod.FileName} 更新失败", ex);
+                }
             }
-            catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException)
+
+            if (updates.Count == 0)
             {
-                LogError($"检查 {mod.FileName} 更新失败", ex);
+                StatusText.Text = "全部已是最新";
+                Log("全部已是最新");
+                return;
             }
-        }
 
-        if (updates.Count == 0)
-        {
-            Log("全部已是最新");
-            return;
-        }
+            string preview = string.Join(
+                Environment.NewLine,
+                updates.Take(8).Select(update => $"• {update.ProjectTitle}：{update.CurrentVersion} → {update.LatestVersion}"));
+            if (updates.Count > 8)
+            {
+                preview += Environment.NewLine + $"…以及另外 {updates.Count - 8} 个";
+            }
 
-        MessageBoxResult choice = MessageBox.Show(
-            $"发现 {updates.Count} 个更新，现在下载吗？",
-            "mod 更新",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
+            MessageBoxResult choice = MessageBox.Show(
+                $"发现 {updates.Count} 个更新：{Environment.NewLine}{Environment.NewLine}{preview}" +
+                $"{Environment.NewLine}{Environment.NewLine}旧 jar 会先备份到 mods/.lx-backup，然后下载并替换。现在更新吗？",
+                "批量更新 mod",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (choice != MessageBoxResult.Yes)
+            {
+                StatusText.Text = "已取消更新";
+                return;
+            }
 
-        if (choice != MessageBoxResult.Yes)
-        {
-            return;
-        }
+            _downloadFailures.Clear();
+            CopyFailuresButton.IsEnabled = false;
+            CopyFailuresButton.Content = "复制失败清单";
+            Progress.Value = 0;
+            Progress.Maximum = updates.Count;
 
-        int done = 0;
-        foreach (ModUpdate update in updates)
-        {
-            var item = new DownloadItem(
-                update.DownloadUrl,
-                "mods/" + update.NewFileName,
-                update.Sha1 ?? string.Empty,
-                update.Size);
+            var progress = new Progress<ModInstallProgress>(p =>
+            {
+                Progress.Maximum = Math.Max(p.Total, 1);
+                Progress.Value = p.Done;
+                StatusText.Text = $"更新 mod {p.Done}/{p.Total}";
+            });
+            Action<DownloadFailure> onFailure = failure => _downloadFailures.Enqueue(failure);
 
-            int failed = await Downloader.DownloadAllAsync(new[] { item }, gameDir);
+            int failed = await ModUpdater.ApplyAsync(
+                updates,
+                gameDir,
+                message => Dispatcher.Invoke(() => Log(message)),
+                progress,
+                onFailure);
+
             if (failed > 0)
             {
-                Log($"[失败] {update.ProjectTitle} 下载失败");
-                continue;
+                CopyFailuresButton.IsEnabled = true;
+                CopyFailuresButton.Content = $"复制失败清单 ({failed})";
+                StatusText.Text = $"更新完成，失败 {failed} 个";
+                Log($"[警告] mod 更新完成，失败 {failed} 个");
             }
-
-            string oldPath = Path.Combine(ModManager.ModsDir(gameDir), update.FileName);
-            if (File.Exists(oldPath))
+            else
             {
-                File.Delete(oldPath);
+                Progress.Value = Progress.Maximum;
+                StatusText.Text = $"已更新 {updates.Count} 个 mod";
+                Log($"mod 批量更新完成：{updates.Count} 个");
             }
 
-            done++;
-            Log($"[已更新] {update.ProjectTitle} → {update.LatestVersion}");
+            RefreshMods();
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = "mod 批量更新失败";
+            LogError("mod 批量更新失败", ex);
+        }
+        finally
+        {
+            _updatingMods = false;
+            CheckUpdatesButton.IsEnabled = true;
+            ScanConflictsButton.IsEnabled = true;
+        }
+    }
+
+    private void ScanConflicts_Click(object sender, RoutedEventArgs e)
+    {
+        if (_updatingMods || _modrinthBusy)
+        {
+            Log("mod 正在安装/更新，等它完成再扫描");
+            return;
         }
 
-        Log($"更新完成：{done}/{updates.Count}");
-        RefreshMods();
+        string gameDir = CurrentGameDir();
+        List<ModFile> mods = ModManager.List(gameDir);
+        if (mods.Count == 0)
+        {
+            StatusText.Text = "mods 目录为空";
+            Log("mods 目录为空");
+            return;
+        }
+
+        List<ModIssue> issues = ModDiagnostics.Scan(mods);
+        if (issues.Count == 0)
+        {
+            StatusText.Text = "未发现 mod 冲突";
+            Log($"冲突扫描：{mods.Count} 个 mod，未发现重复 id 或缺失依赖");
+            MessageBox.Show(
+                $"扫描了 {mods.Count} 个 mod，未发现重复 mod id 或缺失的 required 依赖。",
+                "mod 冲突检测",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        foreach (ModIssue issue in issues)
+        {
+            Log($"[冲突] {issue.Message}");
+        }
+
+        string summary = string.Join(Environment.NewLine, issues.Take(10).Select(issue => "• " + issue.Message));
+        if (issues.Count > 10)
+        {
+            summary += Environment.NewLine + $"…以及另外 {issues.Count - 10} 个";
+        }
+
+        StatusText.Text = $"发现 {issues.Count} 个 mod 问题";
+        MessageBox.Show(
+            $"发现 {issues.Count} 个问题：{Environment.NewLine}{Environment.NewLine}{summary}",
+            "mod 冲突检测",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
     }
 
     private void ModCheck_Click(object sender, RoutedEventArgs e)
@@ -1057,9 +1159,9 @@ public partial class MainWindow : Window
 
     private async void ModrinthInstall_Click(object sender, RoutedEventArgs e)
     {
-        if (_modrinthBusy)
+        if (_modrinthBusy || _updatingMods)
         {
-            Log("正在安装另一个 mod，等它完成");
+            Log("正在安装/更新 mod，等它完成");
             return;
         }
 
@@ -1151,9 +1253,9 @@ public partial class MainWindow : Window
 
     private async void Launch_Click(object sender, RoutedEventArgs e)
     {
-        if (_modrinthBusy)
+        if (_modrinthBusy || _updatingMods)
         {
-            Log("正在安装 mod，等安装完成再启动");
+            Log("正在安装/更新 mod，等它完成再启动");
             return;
         }
 
@@ -1326,9 +1428,9 @@ public partial class MainWindow : Window
 
     private async void Repair_Click(object sender, RoutedEventArgs e)
     {
-        if (_modrinthBusy)
+        if (_modrinthBusy || _updatingMods)
         {
-            Log("正在安装 mod，等安装完成再校验");
+            Log("正在安装/更新 mod，等它完成再校验");
             return;
         }
 
