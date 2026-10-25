@@ -1,6 +1,8 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using Lx.Probe;
@@ -23,6 +25,7 @@ public partial class MainWindow : Window
     private readonly string _installRoot = AppPaths.ResolveInstallRoot();
 
     private List<ModFile> _allMods = new();
+    private readonly ConcurrentQueue<DownloadFailure> _downloadFailures = new();
     private bool _suppressInstanceEvents;
 
     public MainWindow()
@@ -595,6 +598,9 @@ public partial class MainWindow : Window
             return;
         }
 
+        _downloadFailures.Clear();
+        CopyFailuresButton.IsEnabled = false;
+        CopyFailuresButton.Content = "复制失败清单";
         LaunchButton.IsEnabled = false;
         StatusText.Text = "准备中…";
         Progress.Value = 0;
@@ -631,21 +637,34 @@ public partial class MainWindow : Window
                 StatusText.Text = $"{p.Stage} {p.Done}/{p.Total}";
             });
 
+            Action<DownloadFailure> onFailure = failure => _downloadFailures.Enqueue(failure);
+
             LaunchResult result = await LaunchPipeline.RunAsync(
                 options,
                 message => Dispatcher.Invoke(() => Log(message)),
-                progress);
+                progress,
+                onFailure);
 
             Log($"命令行：{result.CommandLine.Length} 字符");
             StartGame(result);
             Progress.Value = Progress.Maximum;
             StatusText.Text = "已启动";
+
+            int failureCount = _downloadFailures.Count;
+            if (failureCount > 0)
+            {
+                CopyFailuresButton.IsEnabled = true;
+                CopyFailuresButton.Content = $"复制失败清单 ({failureCount})";
+                Log($"[警告] 有 {failureCount} 个文件下载失败，已改用本地已有文件继续启动");
+            }
+
             RefreshMods();
         }
         catch (Exception ex)
         {
             LogError("启动失败", ex);
             StatusText.Text = "失败";
+            ShowFailureActions(ex);
         }
         finally
         {
@@ -671,6 +690,98 @@ public partial class MainWindow : Window
         Process? process = Process.Start(info);
         Log(process is null ? "启动失败：进程没有创建" : $"已启动 java（PID {process.Id}）");
         process?.Dispose();
+    }
+
+    // ---------- 启动失败 ----------
+
+    private void CopyFailures_Click(object sender, RoutedEventArgs e) => CopyFailuresToClipboard();
+
+    private void OpenLogs_Click(object sender, RoutedEventArgs e) => OpenLogFolder();
+
+    private void ShowFailureActions(Exception exception)
+    {
+        int count = _downloadFailures.Count;
+        if (count == 0)
+        {
+            MessageBoxResult open = MessageBox.Show(
+                $"启动失败：{exception.Message}{Environment.NewLine}{Environment.NewLine}是否打开日志目录？",
+                "启动失败",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Error);
+
+            if (open == MessageBoxResult.Yes)
+            {
+                OpenLogFolder();
+            }
+
+            return;
+        }
+
+        CopyFailuresButton.IsEnabled = true;
+        CopyFailuresButton.Content = $"复制失败清单 ({count})";
+
+        MessageBoxResult choice = MessageBox.Show(
+            $"启动失败：{exception.Message}{Environment.NewLine}{Environment.NewLine}" +
+            $"本次有 {count} 个文件下载失败。{Environment.NewLine}{Environment.NewLine}" +
+            "是：复制失败清单" + Environment.NewLine +
+            "否：打开日志目录" + Environment.NewLine +
+            "取消：关闭",
+            "启动失败",
+            MessageBoxButton.YesNoCancel,
+            MessageBoxImage.Error);
+
+        if (choice == MessageBoxResult.Yes)
+        {
+            CopyFailuresToClipboard();
+        }
+        else if (choice == MessageBoxResult.No)
+        {
+            OpenLogFolder();
+        }
+    }
+
+    private void CopyFailuresToClipboard()
+    {
+        if (_downloadFailures.IsEmpty)
+        {
+            Log("当前没有下载失败记录");
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(BuildFailureList());
+            Log($"已复制 {_downloadFailures.Count} 条下载失败记录到剪贴板");
+        }
+        catch (Exception ex)
+        {
+            LogError("复制失败清单失败", ex);
+        }
+    }
+
+    private string BuildFailureList()
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine($"# Lx 下载失败清单 {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        builder.AppendLine($"# 共 {_downloadFailures.Count} 条；格式：相对路径 <TAB> 原因 <TAB> URL");
+        foreach (DownloadFailure failure in _downloadFailures)
+        {
+            builder.AppendLine($"{failure.RelativePath}	{failure.Reason}	{failure.Url}");
+        }
+
+        return builder.ToString();
+    }
+
+    private void OpenLogFolder()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(LxLog.DirectoryPath) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            LogError("打开日志目录失败", ex);
+        }
     }
 
     private void Log(string message)

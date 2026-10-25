@@ -30,6 +30,9 @@
             <Button x:Name="LaunchButton" Content="启动游戏" Padding="20,6" Click="Launch_Click"/>
             <ProgressBar x:Name="Progress" Width="260" Height="18" Margin="16,0,0,0" VerticalAlignment="Center"/>
             <TextBlock x:Name="StatusText" Margin="12,0,0,0" VerticalAlignment="Center" Foreground="Gray"/>
+            <Button x:Name="CopyFailuresButton" Content="复制失败清单" Margin="16,0,0,0" Padding="10,3"
+                    IsEnabled="False" Click="CopyFailures_Click"/>
+            <Button Content="打开日志" Margin="8,0,0,0" Padding="10,3" Click="OpenLogs_Click"/>
         </StackPanel>
 
         <Grid Grid.Row="2" Margin="0,12,0,0">

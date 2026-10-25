@@ -34,7 +34,11 @@ public static class LaunchPipeline
         PropertyNameCaseInsensitive = true,
     };
 
-    public static async Task<LaunchResult> RunAsync(LaunchOptions options, Action<string> log, IProgress<LaunchProgress>? progress = null)
+    public static async Task<LaunchResult> RunAsync(
+        LaunchOptions options,
+        Action<string> log,
+        IProgress<LaunchProgress>? progress = null,
+        Action<DownloadFailure>? onDownloadFailure = null)
     {
         string installRoot = options.InstallRoot;
         VersionManifest manifest = await ManifestService.EnsureManifestAsync(installRoot).ConfigureAwait(false);
@@ -72,16 +76,43 @@ public static class LaunchPipeline
 
         var features = new Dictionary<string, bool>();
 
+        // 同一条相对路径只报一次：下载失败后体检还会把它算成"缺失"，两份重复没意义。
+        var reported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        object reportGate = new();
+
+        void ReportFailure(DownloadFailure failure)
+        {
+            lock (reportGate)
+            {
+                if (!reported.Add(failure.RelativePath))
+                {
+                    return;
+                }
+            }
+
+            onDownloadFailure?.Invoke(failure);
+        }
+
         List<DownloadItem> manifestItems = DownloadManifest.Build(version, versionId, features);
         log($"清单：{manifestItems.Count} 个文件，共 {manifestItems.Sum(i => i.Size) / 1024.0 / 1024.0:F1} MB");
-        int failed = await Downloader.DownloadAllAsync(manifestItems, installRoot, 8, (done, total) => progress?.Report(new LaunchProgress("游戏文件", done, total))).ConfigureAwait(false);
+        int failed = await Downloader.DownloadAllAsync(
+            manifestItems,
+            installRoot,
+            8,
+            (done, total) => progress?.Report(new LaunchProgress("游戏文件", done, total)),
+            ReportFailure).ConfigureAwait(false);
         log($"游戏文件下载完成，失败 {failed} 个");
 
         string assetsDir = Path.Combine(installRoot, "assets");
         string indexFile = Path.Combine(assetsDir, "indexes", (version.Assets ?? "12") + ".json");
         List<DownloadItem> assets = DownloadManifest.BuildAssets(indexFile);
         log($"assets：{assets.Count} 个对象");
-        int failedAssets = await Downloader.DownloadAllAsync(assets, installRoot, 8, (done, total) => progress?.Report(new LaunchProgress("assets", done, total))).ConfigureAwait(false);
+        int failedAssets = await Downloader.DownloadAllAsync(
+            assets,
+            installRoot,
+            8,
+            (done, total) => progress?.Report(new LaunchProgress("assets", done, total)),
+            ReportFailure).ConfigureAwait(false);
         log($"assets 下载完成，失败 {failedAssets} 个");
 
         var allFiles = new List<DownloadItem>(manifestItems);
@@ -89,6 +120,11 @@ public static class LaunchPipeline
         List<DownloadItem> missing = InstallCheck.FindMissing(allFiles, installRoot);
         if (missing.Count > 0)
         {
+            foreach (DownloadItem item in missing)
+            {
+                ReportFailure(new DownloadFailure(item.Url, item.RelativePath, null, "文件缺失"));
+            }
+
             foreach (DownloadItem item in missing.Take(10))
             {
                 log($"缺文件：{item.RelativePath}  {item.Url}");

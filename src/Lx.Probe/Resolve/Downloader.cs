@@ -1,5 +1,7 @@
-
 namespace Lx.Probe.Resolve;
+
+// 一次下载失败的完整信息：UI 可以把它拼成"复制失败清单"。
+public sealed record DownloadFailure(string Url, string RelativePath, int? StatusCode, string Reason);
 
 // M2 Step 5：并发下载 + 失败重试 + 进度。仍然是"sha1 对得上就跳过"。
 public static class Downloader
@@ -11,7 +13,8 @@ public static class Downloader
         IReadOnlyList<DownloadItem> items,
         string installRoot,
         int concurrency = 8,
-        Action<int, int>? onProgress = null)
+        Action<int, int>? onProgress = null,
+        Action<DownloadFailure>? onFailure = null)
     {
         int ok = 0;
         int skipped = 0;
@@ -38,14 +41,16 @@ public static class Downloader
 
                 Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
 
-                bool success = await TryDownloadAsync(item, dest).ConfigureAwait(false);
-                if (success)
+                DownloadFailure? failure = await TryDownloadAsync(item, dest).ConfigureAwait(false);
+                if (failure is null)
                 {
                     Interlocked.Increment(ref ok);
                 }
                 else
                 {
                     Interlocked.Increment(ref failed);
+                    Console.WriteLine($"[失败] {failure.RelativePath}：{failure.Reason}");
+                    onFailure?.Invoke(failure);
                 }
             }
             finally
@@ -92,9 +97,10 @@ public static class Downloader
     }
 
     // 最多试 3 次；4xx 除了 429 都不重试（重试也不会变好）。
-    private static async Task<bool> TryDownloadAsync(DownloadItem item, string dest)
+    private static async Task<DownloadFailure?> TryDownloadAsync(DownloadItem item, string dest)
     {
         string temp = dest + ".part";
+        DownloadFailure? last = null;
 
         for (int attempt = 1; attempt <= 3; attempt++)
         {
@@ -107,10 +113,10 @@ public static class Downloader
                 if (!response.IsSuccessStatusCode)
                 {
                     int status = (int)response.StatusCode;
+                    last = new DownloadFailure(item.Url, item.RelativePath, status, $"HTTP {status}");
                     if (status is >= 400 and < 500 and not 429)
                     {
-                        Console.WriteLine($"[失败] {status} {item.Url}");
-                        return false;
+                        return last;
                     }
 
                     throw new HttpRequestException($"HTTP {status}");
@@ -132,21 +138,34 @@ public static class Downloader
                 {
                     Console.WriteLine($"[警告] 没有 sha1，跳过校验：{item.Url}");
                 }
-                else if (!string.Equals(Hasher.Sha1Of(temp), expectedSha1, StringComparison.OrdinalIgnoreCase))
+                else
                 {
-                    Console.WriteLine($"[sha1 不符] {item.Url}");
-                    return false;
+                    string actualSha1 = Hasher.Sha1Of(temp);
+                    if (!string.Equals(actualSha1, expectedSha1, StringComparison.OrdinalIgnoreCase))
+                    {
+                        TryDelete(temp);
+                        return new DownloadFailure(
+                            item.Url,
+                            item.RelativePath,
+                            null,
+                            $"sha1 不符（期望 {Short(expectedSha1)}，实际 {Short(actualSha1)}）");
+                    }
                 }
 
                 File.Move(temp, dest, overwrite: true);
-                return true;
+                return null;
             }
             catch (Exception ex) when (ex is HttpRequestException or IOException or TaskCanceledException)
             {
+                last = new DownloadFailure(
+                    item.Url,
+                    item.RelativePath,
+                    last?.StatusCode,
+                    $"{ex.GetType().Name}: {ex.Message}");
+
                 if (attempt == 3)
                 {
-                    Console.WriteLine($"[失败] {ex.GetType().Name} {item.Url}");
-                    return false;
+                    return last;
                 }
 
                 // 1s → 2s → 4s
@@ -154,7 +173,23 @@ public static class Downloader
             }
         }
 
-        return false;
+        return last;
     }
 
+    private static string Short(string hash) => hash.Length <= 10 ? hash : hash[..10] + "...";
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 删不掉就留着，下次启动会覆盖
+        }
+    }
 }
