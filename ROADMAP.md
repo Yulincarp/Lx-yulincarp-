@@ -28,7 +28,7 @@
 
 | 模块 | 现状 | 主要位置 |
 |---|---|---|
-| 启动内核 | version.json 解析、inheritsFrom 合并、rules/arch 过滤、classpath、natives、参数展开、命令行 | `src/Lx.Probe/Resolve`、`Launch/LaunchPipeline.cs` |
+| 启动内核 | version.json 解析、inheritsFrom 合并、rules/arch 过滤、classpath、natives、参数展开、命令行 | `src/Lx.Core/Resolve`、`Launch/LaunchPipeline.cs` |
 | 下载 | 8 并发、sha1 跳过、`.part` 临时文件、3 次退避重试、Mojang 运行时自动下载 | `Resolve/Downloader.cs`、`Launch/JavaRuntime.cs` |
 | 账号 | 离线 / 外置 Yggdrasil（含角色切换）/ 微软 device code；多账号 | `Auth/`、`accounts.json` |
 | 加载器 | Fabric、Forge、NeoForge（安装器）、OptiFine/OptiFabric | `Resolve/FabricInstaller.cs`、`Loaders/` |

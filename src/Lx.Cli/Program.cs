@@ -158,7 +158,7 @@ if (installLoaderArg is not null)
             artifactSourceArg);
 
         Console.WriteLine($"安装完成：{installedId}");
-        Console.WriteLine($"启动：dotnet run --project src/Lx.Probe -- --version {installedId}");
+        Console.WriteLine($"启动：dotnet run --project src/Lx.Cli -- --version {installedId}");
         return 0;
     }
     catch (Exception ex) when (ex is InvalidOperationException or IOException)

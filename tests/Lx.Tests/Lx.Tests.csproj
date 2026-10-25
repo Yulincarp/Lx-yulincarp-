@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Lx.Probe\Lx.Probe.csproj" />
+    <ProjectReference Include="..\..\src\Lx.Core\Lx.Core.csproj" />
   </ItemGroup>
 
 </Project>

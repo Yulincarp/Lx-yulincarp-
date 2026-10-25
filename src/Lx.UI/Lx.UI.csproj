@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\Lx.Probe\Lx.Probe.csproj" />
+    <ProjectReference Include="..\Lx.Core\Lx.Core.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

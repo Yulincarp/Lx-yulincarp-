@@ -112,5 +112,5 @@ public static class AppPaths
 
     private static bool IsDevBuild(string baseDir) =>
         baseDir.Contains(Path.Combine("src", "Lx.UI", "bin"), StringComparison.OrdinalIgnoreCase) ||
-        baseDir.Contains(Path.Combine("src", "Lx.Probe", "bin"), StringComparison.OrdinalIgnoreCase);
+        baseDir.Contains(Path.Combine("src", "Lx.Cli", "bin"), StringComparison.OrdinalIgnoreCase);
 }

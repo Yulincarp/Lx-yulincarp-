@@ -1,4 +1,4 @@
-﻿<#
+<#
     Lx Launcher 发布脚本
     默认：自包含单文件（解压即用，约 150 MB）
     可选：-FrameworkDependent（约 10 MB，需要 .NET 8 Desktop Runtime）
@@ -37,12 +37,6 @@ dotnet publish "src\Lx.UI\Lx.UI.csproj" `
     -p:DebugType=None `
     -p:DebugSymbols=false `
     -o $out
-
-# 单文件发布不需要这个（它是 Lx.Probe 作为 Exe 项目带出来的）
-$probeConfig = Join-Path $out "Lx.Probe.runtimeconfig.json"
-if (Test-Path $probeConfig) {
-    Remove-Item -Force $probeConfig
-}
 
 # 如果系统 TEMP 不可写，单文件解包会失败；run.cmd 把解包目录指到可写的 LocalAppData
 $runCmd = @"

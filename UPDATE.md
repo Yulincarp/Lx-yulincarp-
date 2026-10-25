@@ -1,6 +1,6 @@
 # 启动器自更新说明
 
-> 相关代码：`src/Lx.Probe/Updates/UpdateService.cs`  
+> 相关代码：`src/Lx.Core/Updates/UpdateService.cs`  
 > 只有 **publish.ps1 生成的发布版** 会启用自更新；`dotnet run` 的开发版不会。
 
 ## 1. 发一个新版本
