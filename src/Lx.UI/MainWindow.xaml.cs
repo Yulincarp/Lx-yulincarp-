@@ -3,6 +3,7 @@ using System.IO;
 using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
+using Lx.Probe;
 using Lx.Probe.Auth;
 using Lx.Probe.Instances;
 using Lx.Probe.Loaders;
@@ -12,13 +13,14 @@ using Lx.Probe.Modpacks;
 using Lx.Probe.Mods;
 using Lx.Probe.Resolve;
 using Microsoft.Win32;
+using LxLog = Lx.Probe.Diagnostics.Log;
 
 namespace Lx.UI;
 
 public partial class MainWindow : Window
 {
     // 从 bin 目录往上找 Lx.sln，把 minecraft 定位到仓库根，避免"从哪个目录启动"影响结果。
-    private readonly string _installRoot = ResolveInstallRoot();
+    private readonly string _installRoot = AppPaths.ResolveInstallRoot();
 
     private List<ModFile> _allMods = new();
     private bool _suppressInstanceEvents;
@@ -27,22 +29,6 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         Loaded += async (_, _) => await InitializeAsync();
-    }
-
-    private static string ResolveInstallRoot()
-    {
-        DirectoryInfo? dir = new(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            if (File.Exists(Path.Combine(dir.FullName, "Lx.sln")))
-            {
-                return Path.Combine(dir.FullName, "minecraft");
-            }
-
-            dir = dir.Parent;
-        }
-
-        return Path.GetFullPath("minecraft");
     }
 
     private async Task InitializeAsync()
@@ -69,10 +55,11 @@ public partial class MainWindow : Window
 
             Log($"安装目录：{_installRoot}");
             Log($"版本清单：{versions.Count} 个");
+            Log($"日志：{LxLog.CurrentFile ?? LxLog.DirectoryPath}");
         }
         catch (Exception ex)
         {
-            Log($"[错误] {ex.Message}");
+            LogError("初始化失败", ex);
         }
     }
 
@@ -158,7 +145,7 @@ public partial class MainWindow : Window
         }
         catch (InvalidOperationException ex)
         {
-            Log($"[错误] {ex.Message}");
+            LogError("切换角色失败", ex);
         }
     }
 
@@ -305,7 +292,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException)
         {
-            Log($"[错误] {ex.Message}");
+            LogError("导入整合包失败", ex);
         }
     }
 
@@ -330,7 +317,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException)
         {
-            Log($"[错误] {ex.Message}");
+            LogError("更新整合包失败", ex);
         }
     }
 
@@ -350,7 +337,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException)
         {
-            Log($"[错误] {ex.Message}");
+            LogError("安装 OptiFabric 失败", ex);
         }
     }
 
@@ -415,7 +402,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Log($"[错误] {ex.Message}");
+            LogError("读取 mods 失败", ex);
         }
     }
 
@@ -482,7 +469,7 @@ public partial class MainWindow : Window
             }
             catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException)
             {
-                Log($"[错误] {mod.FileName}: {ex.Message}");
+                LogError($"检查 {mod.FileName} 更新失败", ex);
             }
         }
 
@@ -570,7 +557,7 @@ public partial class MainWindow : Window
             }
             catch (Exception ex) when (ex is InvalidOperationException or IOException)
             {
-                Log($"[错误] {ex.Message}");
+                LogError($"添加 mod 失败：{Path.GetFileName(file)}", ex);
             }
         }
 
@@ -657,7 +644,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Log($"[错误] {ex.Message}");
+            LogError("启动失败", ex);
             StatusText.Text = "失败";
         }
         finally
@@ -687,6 +674,19 @@ public partial class MainWindow : Window
     }
 
     private void Log(string message)
+    {
+        LxLog.Info(message);
+        AppendToLogBox(message);
+    }
+
+    // 异常要把堆栈写进文件，否则远程排错只剩一句"出错了"。
+    private void LogError(string context, Exception exception)
+    {
+        LxLog.Error(context, exception);
+        AppendToLogBox($"[错误] {context}：{exception.Message}");
+    }
+
+    private void AppendToLogBox(string message)
     {
         LogBox.AppendText(message + Environment.NewLine);
         LogBox.ScrollToEnd();
