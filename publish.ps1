@@ -1,4 +1,4 @@
-<#
+﻿<#
     Lx Launcher 发布脚本
     默认：自包含单文件（解压即用，约 150 MB）
     可选：-FrameworkDependent（约 10 MB，需要 .NET 8 Desktop Runtime）
