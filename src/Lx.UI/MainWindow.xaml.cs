@@ -15,6 +15,7 @@ using Lx.Probe.Model;
 using Lx.Probe.Modpacks;
 using Lx.Probe.Mods;
 using Lx.Probe.Resolve;
+using Lx.Probe.Updates;
 using Microsoft.Win32;
 using LxLog = Lx.Probe.Diagnostics.Log;
 
@@ -55,7 +56,38 @@ public partial class MainWindow : Window
             app.SessionEnding += (_, _) => _closing = true;
         }
 
-        Loaded += async (_, _) => await InitializeAsync();
+        Loaded += async (_, _) =>
+        {
+            await InitializeAsync();
+            _ = CheckForUpdatesAsync();
+        };
+    }
+
+    private async Task CheckForUpdatesAsync()
+    {
+        if (!UpdateService.CanSelfUpdate)
+        {
+            return;
+        }
+
+        string? manifestUrl = UpdateService.ResolveManifestUrl(_installRoot);
+        if (manifestUrl is null)
+        {
+            return;
+        }
+
+        try
+        {
+            UpdateInfo? info = await UpdateService.CheckAsync(manifestUrl);
+            if (info is not null)
+            {
+                Log($"[更新] 发现新版本 v{info.Version}（当前 v{AppInfo.Version}），可在「设置」里更新");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"[更新] 检查失败：{ex.Message}");
+        }
     }
 
     private async Task InitializeAsync()

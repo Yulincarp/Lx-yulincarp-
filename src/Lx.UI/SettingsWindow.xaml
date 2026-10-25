@@ -64,6 +64,10 @@
                    Text="自动模式会按版本要求选择 Java。BMCLAPI 镜像可加速原版、资源与库的下载；自定义源需要兼容 BMCLAPI 路径。"/>
 
         <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right">
+            <TextBlock x:Name="VersionText" Foreground="#888" VerticalAlignment="Center" Margin="0,0,12,0"/>
+            <Button x:Name="UpdateButton" Content="检查更新" Padding="12,5" Margin="0,0,10,0"
+                    Click="CheckUpdate_Click"
+                    ToolTip="检查 update.json 里是否有新版本"/>
             <Button Content="保存" Padding="20,5" Click="Save_Click"/>
             <Button Content="取消" Padding="20,5" Margin="10,0,0,0" Click="Cancel_Click"/>
         </StackPanel>

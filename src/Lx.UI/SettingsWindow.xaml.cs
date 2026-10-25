@@ -1,8 +1,10 @@
 using System.Windows;
 using System.Windows.Controls;
+using Lx.Probe;
 using Lx.Probe.Launch;
 using Lx.Probe.Model;
 using Lx.Probe.Resolve;
+using Lx.Probe.Updates;
 using Microsoft.Win32;
 
 namespace Lx.UI;
@@ -26,6 +28,7 @@ public partial class SettingsWindow : Window
     {
         InitializeComponent();
         _installRoot = installRoot;
+        VersionText.Text = $"v{AppInfo.Version}";
 
         LaunchSettings settings = SettingsStore.Load(installRoot);
         MinBox.Text = settings.MinMemoryMb.ToString();
@@ -66,6 +69,70 @@ public partial class SettingsWindow : Window
         }
 
         CustomSourceBox.IsEnabled = SelectedSourceKey() == DownloadSourceSettings.Custom;
+    }
+
+    private async void CheckUpdate_Click(object sender, RoutedEventArgs e)
+    {
+        if (!UpdateService.CanSelfUpdate)
+        {
+            HintText.Text = "开发版不支持自更新；请用 publish.ps1 生成的发布版测试。";
+            return;
+        }
+
+        string? manifestUrl = UpdateService.ResolveManifestUrl(_installRoot);
+        if (manifestUrl is null)
+        {
+            HintText.Text = "未配置更新地址：设置环境变量 LX_UPDATE_URL，或把 update.json 放到数据目录。";
+            return;
+        }
+
+        UpdateButton.IsEnabled = false;
+        try
+        {
+            HintText.Text = "正在检查更新…";
+            UpdateInfo? info = await UpdateService.CheckAsync(manifestUrl);
+            if (info is null)
+            {
+                HintText.Text = $"已是最新版本（v{AppInfo.Version}）";
+                return;
+            }
+
+            MessageBoxResult choice = MessageBox.Show(
+                $"发现新版本 v{info.Version}（当前 v{AppInfo.Version}）。{Environment.NewLine}{Environment.NewLine}现在下载并更新吗？",
+                "检查更新",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (choice != MessageBoxResult.Yes)
+            {
+                HintText.Text = "已跳过更新";
+                return;
+            }
+
+            var progress = new Progress<double>(p => HintText.Text = $"下载中 {p:P0}");
+            StagedUpdate staged = await UpdateService.DownloadAsync(info, _installRoot, progress);
+
+            MessageBoxResult apply = MessageBox.Show(
+                "更新包已下载并通过校验。现在重启启动器并安装吗？",
+                "更新",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (apply != MessageBoxResult.Yes)
+            {
+                HintText.Text = "更新包已保留，可稍后再装";
+                return;
+            }
+
+            UpdateService.StartUpdater(staged, AppContext.BaseDirectory);
+            Application.Current.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            HintText.Text = "更新失败：" + ex.Message;
+        }
+        finally
+        {
+            UpdateButton.IsEnabled = true;
+        }
     }
 
     private void Browse_Click(object sender, RoutedEventArgs e)
