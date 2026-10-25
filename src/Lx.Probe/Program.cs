@@ -273,7 +273,13 @@ if (listAccounts)
 
 if (listOnly)
 {
-    VersionManifest manifest = await ManifestService.EnsureManifestAsync(installRoot);
+    LaunchSettings listSettings = SettingsStore.Load(installRoot);
+    var listSource = new DownloadSourceSettings(listSettings.DownloadSource, listSettings.CustomDownloadBase);
+    VersionManifest manifest = await ManifestService.EnsureManifestAsync(
+        installRoot,
+        url => DownloadUrlRewriter.Rewrite(url, listSource));
+
+    Console.WriteLine($"下载源 = {DownloadUrlRewriter.Describe(listSource)}");
     Console.WriteLine($"最新 release = {manifest.Latest?.Release}，最新 snapshot = {manifest.Latest?.Snapshot}");
     Console.WriteLine($"共 {manifest.Versions?.Count ?? 0} 个版本，最近 20 个：");
     foreach (ManifestVersion version in (manifest.Versions ?? new List<ManifestVersion>()).Take(20))

@@ -41,11 +41,16 @@ public static class LaunchPipeline
         Action<DownloadFailure>? onDownloadFailure = null)
     {
         string installRoot = options.InstallRoot;
-        VersionManifest manifest = await ManifestService.EnsureManifestAsync(installRoot).ConfigureAwait(false);
+        LaunchSettings settings = SettingsStore.Load(installRoot);
+        var source = new DownloadSourceSettings(settings.DownloadSource, settings.CustomDownloadBase);
+        Func<string, string> rewriteUrl = url => DownloadUrlRewriter.Rewrite(url, source);
+        log($"下载源：{DownloadUrlRewriter.Describe(source)}");
+
+        VersionManifest manifest = await ManifestService.EnsureManifestAsync(installRoot, rewriteUrl).ConfigureAwait(false);
 
         string versionId = options.VersionId;
         string versionJsonPath = await ManifestService
-            .EnsureVersionJsonAsync(manifest, versionId, installRoot)
+            .EnsureVersionJsonAsync(manifest, versionId, installRoot, rewriteUrl)
             .ConfigureAwait(false);
 
         if (string.Equals(options.Loader, "fabric", StringComparison.OrdinalIgnoreCase))
@@ -93,7 +98,7 @@ public static class LaunchPipeline
             onDownloadFailure?.Invoke(failure);
         }
 
-        List<DownloadItem> manifestItems = DownloadManifest.Build(version, versionId, features);
+        List<DownloadItem> manifestItems = DownloadManifest.Build(version, versionId, features, rewriteUrl);
         log($"清单：{manifestItems.Count} 个文件，共 {manifestItems.Sum(i => i.Size) / 1024.0 / 1024.0:F1} MB");
         int failed = await Downloader.DownloadAllAsync(
             manifestItems,
@@ -105,7 +110,7 @@ public static class LaunchPipeline
 
         string assetsDir = Path.Combine(installRoot, "assets");
         string indexFile = Path.Combine(assetsDir, "indexes", (version.Assets ?? "12") + ".json");
-        List<DownloadItem> assets = DownloadManifest.BuildAssets(indexFile);
+        List<DownloadItem> assets = DownloadManifest.BuildAssets(indexFile, rewriteUrl);
         log($"assets：{assets.Count} 个对象");
         int failedAssets = await Downloader.DownloadAllAsync(
             assets,
@@ -214,7 +219,6 @@ public static class LaunchPipeline
         }
 
         List<string> gameArgs = ArgumentExpander.Expand(version.Arguments?.Game, values, features);
-        LaunchSettings settings = SettingsStore.Load(installRoot);
 
         if (settings.MaxMemoryMb > 0 && !jvmArgs.Any(arg => arg.StartsWith("-Xmx", StringComparison.OrdinalIgnoreCase)))
         {
@@ -235,7 +239,7 @@ public static class LaunchPipeline
         }
         else
         {
-            javaExe = await JavaRuntime.EnsureJavaAsync(installRoot, javaMajor, version.JavaVersion?.Component, log).ConfigureAwait(false);
+            javaExe = await JavaRuntime.EnsureJavaAsync(installRoot, javaMajor, version.JavaVersion?.Component, log, rewriteUrl).ConfigureAwait(false);
         }
         string commandLine = CommandLineBuilder.Build(javaExe, jvmArgs, version.MainClass ?? string.Empty, gameArgs);
 

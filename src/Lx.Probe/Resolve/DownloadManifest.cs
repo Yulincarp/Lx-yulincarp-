@@ -8,7 +8,11 @@ public sealed record DownloadItem(string Url, string RelativePath, string Sha1, 
 
 public static class DownloadManifest
 {
-    public static List<DownloadItem> Build(VersionJson version, string versionId, Dictionary<string, bool> features)
+    public static List<DownloadItem> Build(
+        VersionJson version,
+        string versionId,
+        Dictionary<string, bool> features,
+        Func<string, string>? rewriteUrl = null)
     {
         var items = new List<DownloadItem>();
 
@@ -39,7 +43,8 @@ public static class DownloadManifest
                 continue; // 没有 sha1 的库宁可跳过，也不下可疑文件
             }
 
-            items.Add(new DownloadItem(url, "libraries/" + path, sha1, artifact.Size));
+            string finalUrl = rewriteUrl?.Invoke(url) ?? url;
+            items.Add(new DownloadItem(finalUrl, "libraries/" + path, sha1, artifact.Size));
         }
 
         LibraryArtifact? client = version.Downloads?.Client;
@@ -50,21 +55,23 @@ public static class DownloadManifest
             if (url is not null && sha1 is not null)
             {
                 string clientVersionId = version.InheritsFrom ?? versionId;
-                items.Add(new DownloadItem(url, $"versions/{clientVersionId}/{clientVersionId}.jar", sha1, client.Size));
+                string finalUrl = rewriteUrl?.Invoke(url) ?? url;
+                items.Add(new DownloadItem(finalUrl, $"versions/{clientVersionId}/{clientVersionId}.jar", sha1, client.Size));
             }
         }
 
         AssetIndexInfo? assetIndex = version.AssetIndex;
         if (assetIndex?.Url is not null && assetIndex.Sha1 is not null && assetIndex.Id is not null)
         {
-            items.Add(new DownloadItem(assetIndex.Url, $"assets/indexes/{assetIndex.Id}.json", assetIndex.Sha1, assetIndex.Size));
+            string finalUrl = rewriteUrl?.Invoke(assetIndex.Url) ?? assetIndex.Url;
+            items.Add(new DownloadItem(finalUrl, $"assets/indexes/{assetIndex.Id}.json", assetIndex.Sha1, assetIndex.Size));
         }
 
         return items;
     }
 
     // 解析 assets/indexes/<id>.json，把 3811 个对象变成下载条目。
-    public static List<DownloadItem> BuildAssets(string indexPath)
+    public static List<DownloadItem> BuildAssets(string indexPath, Func<string, string>? rewriteUrl = null)
     {
         string json = File.ReadAllText(indexPath);
         AssetIndexFile? index = JsonSerializer.Deserialize<AssetIndexFile>(
@@ -84,8 +91,9 @@ public static class DownloadManifest
             }
 
             string prefix = hash[..2];
+            string url = $"https://resources.download.minecraft.net/{prefix}/{hash}";
             items.Add(new DownloadItem(
-                $"https://resources.download.minecraft.net/{prefix}/{hash}",
+                rewriteUrl?.Invoke(url) ?? url,
                 $"assets/objects/{prefix}/{hash}",
                 hash,
                 pair.Value.Size));

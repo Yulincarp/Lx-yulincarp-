@@ -38,7 +38,11 @@ public partial class MainWindow : Window
     {
         try
         {
-            VersionManifest manifest = await ManifestService.EnsureManifestAsync(_installRoot);
+            LaunchSettings settings = SettingsStore.Load(_installRoot);
+            var source = new DownloadSourceSettings(settings.DownloadSource, settings.CustomDownloadBase);
+            Func<string, string> rewriteUrl = url => DownloadUrlRewriter.Rewrite(url, source);
+
+            VersionManifest manifest = await ManifestService.EnsureManifestAsync(_installRoot, rewriteUrl);
             List<ManifestVersion> versions = manifest.Versions ?? new List<ManifestVersion>();
 
             // 把本地装好的（Forge/NeoForge/Fabric）也加进下拉框
@@ -57,6 +61,7 @@ public partial class MainWindow : Window
             RefreshInstances();
 
             Log($"安装目录：{_installRoot}");
+            Log($"下载源：{DownloadUrlRewriter.Describe(source)}");
             Log($"版本清单：{versions.Count} 个");
             Log($"日志：{LxLog.CurrentFile ?? LxLog.DirectoryPath}");
         }
@@ -108,7 +113,8 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog() == true)
         {
             LaunchSettings settings = SettingsStore.Load(_installRoot);
-            Log($"设置已保存：内存 {settings.MinMemoryMb}-{settings.MaxMemoryMb} MB，Java {(settings.JavaPath ?? "自动")}");
+            var source = new DownloadSourceSettings(settings.DownloadSource, settings.CustomDownloadBase);
+            Log($"设置已保存：内存 {settings.MinMemoryMb}-{settings.MaxMemoryMb} MB，Java {(settings.JavaPath ?? "自动")}，下载源 {DownloadUrlRewriter.Describe(source)}");
         }
     }
 

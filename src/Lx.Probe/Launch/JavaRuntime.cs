@@ -22,7 +22,8 @@ public static class JavaRuntime
         string installRoot,
         int requiredMajor,
         string? component,
-        Action<string> log)
+        Action<string> log,
+        Func<string, string>? rewriteUrl = null)
     {
         string platform = OperatingSystem.IsWindows() ? "windows-x64" : "linux";
 
@@ -48,7 +49,7 @@ public static class JavaRuntime
         }
 
         log($"需要 Java {requiredMajor}，本机没有；下载 Mojang 运行时 {component}（首次约 150 MB）…");
-        await DownloadRuntimeAsync(runtimeDir, component, platform, log).ConfigureAwait(false);
+        await DownloadRuntimeAsync(runtimeDir, component, platform, log, rewriteUrl).ConfigureAwait(false);
 
         if (!File.Exists(exePath))
         {
@@ -68,9 +69,15 @@ public static class JavaRuntime
         _ => null,
     };
 
-    private static async Task DownloadRuntimeAsync(string runtimeDir, string component, string platform, Action<string> log)
+    private static async Task DownloadRuntimeAsync(
+        string runtimeDir,
+        string component,
+        string platform,
+        Action<string> log,
+        Func<string, string>? rewriteUrl = null)
     {
-        JsonNode root = JsonNode.Parse(await Http.GetStringAsync(AllRuntimesUrl).ConfigureAwait(false))!;
+        string allRuntimesUrl = rewriteUrl?.Invoke(AllRuntimesUrl) ?? AllRuntimesUrl;
+        JsonNode root = JsonNode.Parse(await Http.GetStringAsync(allRuntimesUrl).ConfigureAwait(false))!;
         JsonNode? entry = (root[platform]?[component] as JsonArray)?.FirstOrDefault();
         string? manifestUrl = entry?["manifest"]?["url"]?.GetValue<string>();
 
@@ -79,7 +86,8 @@ public static class JavaRuntime
             throw new InvalidOperationException($"Mojang 没有给 {platform} 提供运行时 {component}");
         }
 
-        JsonNode manifest = JsonNode.Parse(await Http.GetStringAsync(manifestUrl).ConfigureAwait(false))!;
+        string runtimeManifestUrl = rewriteUrl?.Invoke(manifestUrl) ?? manifestUrl;
+        JsonNode manifest = JsonNode.Parse(await Http.GetStringAsync(runtimeManifestUrl).ConfigureAwait(false))!;
         if (manifest["files"] is not JsonObject files)
         {
             throw new InvalidOperationException("运行时清单格式不对");
@@ -101,7 +109,7 @@ public static class JavaRuntime
             }
 
             items.Add(new DownloadItem(
-                url,
+                rewriteUrl?.Invoke(url) ?? url,
                 relative.Replace('/', Path.DirectorySeparatorChar),
                 raw?["sha1"]?.GetValue<string>() ?? string.Empty,
                 raw?["size"]?.GetValue<long>() ?? 0));

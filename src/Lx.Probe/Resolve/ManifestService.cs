@@ -10,14 +10,17 @@ public static class ManifestService
 
     private static readonly JsonSerializerOptions Options = new() { PropertyNameCaseInsensitive = true };
 
-    public static async Task<VersionManifest> EnsureManifestAsync(string installRoot)
+    public static async Task<VersionManifest> EnsureManifestAsync(
+        string installRoot,
+        Func<string, string>? rewriteUrl = null)
     {
         string path = Path.Combine(installRoot, "version_manifest_v2.json");
         if (!File.Exists(path))
         {
             Directory.CreateDirectory(installRoot);
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
-            string json = await http.GetStringAsync(ManifestUrl).ConfigureAwait(false);
+            string url = rewriteUrl?.Invoke(ManifestUrl) ?? ManifestUrl;
+            string json = await http.GetStringAsync(url).ConfigureAwait(false);
             await File.WriteAllTextAsync(path, json).ConfigureAwait(false);
         }
 
@@ -55,7 +58,11 @@ public static class ManifestService
             ?? throw new InvalidOperationException($"版本 {versionId} 不在 manifest 里，用 --list 看看有哪些");
     }
 
-    public static async Task<string> EnsureVersionJsonAsync(VersionManifest manifest, string versionId, string installRoot)
+    public static async Task<string> EnsureVersionJsonAsync(
+        VersionManifest manifest,
+        string versionId,
+        string installRoot,
+        Func<string, string>? rewriteUrl = null)
     {
         string dir = Path.Combine(installRoot, "versions", versionId);
         string path = Path.Combine(dir, versionId + ".json");
@@ -88,7 +95,8 @@ public static class ManifestService
 
         Directory.CreateDirectory(dir);
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
-        string json = await http.GetStringAsync(entry.Url).ConfigureAwait(false);
+        string url = rewriteUrl?.Invoke(entry.Url) ?? entry.Url;
+        string json = await http.GetStringAsync(url).ConfigureAwait(false);
         await File.WriteAllTextAsync(path, json).ConfigureAwait(false);
 
         return path;

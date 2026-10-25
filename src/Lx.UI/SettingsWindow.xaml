@@ -1,10 +1,12 @@
 <Window x:Class="Lx.UI.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="设置" Height="360" Width="520"
+        Title="设置" Height="500" Width="560"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
     <Grid Margin="20">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -41,10 +43,27 @@
             <Button Grid.Column="1" Content="浏览…" Padding="14,3" Margin="8,0,0,0" Click="Browse_Click"/>
         </Grid>
 
-        <TextBlock Grid.Row="4" x:Name="HintText" Foreground="#888" TextWrapping="Wrap" Margin="0,12,0,0"
-                   Text="自动模式会按版本要求选择 Java（1.20.4 → 17，1.21.1 → 21），本机没有时自动下载 Mojang 运行时。"/>
+        <TextBlock Grid.Row="4" Text="下载" FontWeight="Bold" Margin="0,18,0,8"/>
 
-        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
+        <StackPanel Grid.Row="5">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="110"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="下载源：" VerticalAlignment="Center"/>
+                <ComboBox Grid.Column="1" x:Name="SourceBox" Padding="6,3"
+                          SelectionChanged="Source_Changed"/>
+            </Grid>
+            <TextBox x:Name="CustomSourceBox" Margin="110,8,0,0" Padding="6,3" IsEnabled="False"
+                     ToolTip="兼容 BMCLAPI 路径的镜像根地址，例如 https://bmclapi2.bangbang93.com"/>
+        </StackPanel>
+
+        <TextBlock Grid.Row="6" x:Name="HintText" Foreground="#888" TextWrapping="Wrap"
+                   VerticalAlignment="Top" Margin="0,12,0,0"
+                   Text="自动模式会按版本要求选择 Java。BMCLAPI 镜像可加速原版、资源与库的下载；自定义源需要兼容 BMCLAPI 路径。"/>
+
+        <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="保存" Padding="20,5" Click="Save_Click"/>
             <Button Content="取消" Padding="20,5" Margin="10,0,0,0" Click="Cancel_Click"/>
         </StackPanel>

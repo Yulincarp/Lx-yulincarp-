@@ -2,11 +2,13 @@ using System.Text.Json;
 
 namespace Lx.Probe.Model;
 
-// 启动器设置：内存分配和 Java 选择。存在 minecraft/settings.json。
+// 启动器设置：内存、Java、下载源。存在 minecraft/settings.json。
 public sealed record LaunchSettings(
     int MinMemoryMb = 1024,
     int MaxMemoryMb = 4096,
-    string? JavaPath = null)
+    string? JavaPath = null,
+    string? DownloadSource = null,
+    string? CustomDownloadBase = null)
 {
     public const int MinAllowedMb = 256;
     public const int MaxAllowedMb = 65536;

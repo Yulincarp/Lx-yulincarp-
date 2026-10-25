@@ -1,6 +1,8 @@
 using System.Windows;
+using System.Windows.Controls;
 using Lx.Probe.Launch;
 using Lx.Probe.Model;
+using Lx.Probe.Resolve;
 using Microsoft.Win32;
 
 namespace Lx.UI;
@@ -8,6 +10,15 @@ namespace Lx.UI;
 public partial class SettingsWindow : Window
 {
     private sealed record JavaChoice(string? Path, string Display);
+
+    private sealed record SourceChoice(string Key, string Display);
+
+    private static readonly SourceChoice[] Sources =
+    {
+        new(DownloadSourceSettings.Official, "官方（Mojang）"),
+        new(DownloadSourceSettings.Bmclapi, "BMCLAPI 镜像（国内推荐）"),
+        new(DownloadSourceSettings.Custom, "自定义（兼容 BMCLAPI 路径）"),
+    };
 
     private readonly string _installRoot;
 
@@ -34,6 +45,27 @@ public partial class SettingsWindow : Window
         JavaBox.DisplayMemberPath = "Display";
         JavaBox.SelectedItem = choices.FirstOrDefault(choice =>
             string.Equals(choice.Path, settings.JavaPath, StringComparison.OrdinalIgnoreCase)) ?? choices[0];
+
+        SourceBox.ItemsSource = Sources;
+        SourceBox.DisplayMemberPath = "Display";
+        string sourceKey = settings.DownloadSource ?? DownloadSourceSettings.Official;
+        SourceBox.SelectedItem = Sources.FirstOrDefault(s => s.Key == sourceKey) ?? Sources[0];
+
+        CustomSourceBox.Text = settings.CustomDownloadBase ?? string.Empty;
+        CustomSourceBox.IsEnabled = SelectedSourceKey() == DownloadSourceSettings.Custom;
+    }
+
+    private string SelectedSourceKey() =>
+        (SourceBox.SelectedItem as SourceChoice)?.Key ?? DownloadSourceSettings.Official;
+
+    private void Source_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (CustomSourceBox is null)
+        {
+            return;
+        }
+
+        CustomSourceBox.IsEnabled = SelectedSourceKey() == DownloadSourceSettings.Custom;
     }
 
     private void Browse_Click(object sender, RoutedEventArgs e)
@@ -72,8 +104,26 @@ public partial class SettingsWindow : Window
             return;
         }
 
+        string sourceKey = SelectedSourceKey();
+        string? customBase = null;
+        if (sourceKey == DownloadSourceSettings.Custom)
+        {
+            customBase = DownloadUrlRewriter.NormalizeBase(CustomSourceBox.Text);
+            if (customBase.Length == 0)
+            {
+                HintText.Text = "自定义下载源要填 http/https 开头的地址";
+                return;
+            }
+        }
+
         JavaChoice? java = JavaBox.SelectedItem as JavaChoice;
-        SettingsStore.Save(_installRoot, new LaunchSettings(min, max, java?.Path));
+        SettingsStore.Save(_installRoot, new LaunchSettings(
+            MinMemoryMb: min,
+            MaxMemoryMb: max,
+            JavaPath: java?.Path,
+            DownloadSource: sourceKey,
+            CustomDownloadBase: customBase));
+
         DialogResult = true;
         Close();
     }
