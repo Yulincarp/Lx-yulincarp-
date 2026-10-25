@@ -31,6 +31,8 @@ public partial class MainWindow : Window
 
     private Process? _gameProcess;
     private DateTime _gameStartedAt;
+    private CancellationTokenSource? _launchCts;
+    private DateTime _launchStartedAt;
     private bool _closing;
 
     public MainWindow()
@@ -622,6 +624,21 @@ public partial class MainWindow : Window
 
     private async void Launch_Click(object sender, RoutedEventArgs e)
     {
+        if (_launchCts is not null)
+        {
+            // 防手快双击：刚点完"启动"的 600ms 内不把第二下当成取消
+            if ((DateTime.Now - _launchStartedAt).TotalMilliseconds < 600)
+            {
+                return;
+            }
+
+            _launchCts.Cancel();
+            LaunchButton.IsEnabled = false;
+            StatusText.Text = "正在取消…";
+            Log("正在取消启动…");
+            return;
+        }
+
         if (_gameProcess is { } runningGame && !runningGame.HasExited)
         {
             Log("游戏已经在运行，等它退出后再启动。");
@@ -643,7 +660,12 @@ public partial class MainWindow : Window
         _downloadFailures.Clear();
         CopyFailuresButton.IsEnabled = false;
         CopyFailuresButton.Content = "复制失败清单";
-        LaunchButton.IsEnabled = false;
+
+        var cts = new CancellationTokenSource();
+        _launchCts = cts;
+        _launchStartedAt = DateTime.Now;
+        LaunchButton.Content = "取消";
+        LaunchButton.IsEnabled = true;
         StatusText.Text = "准备中…";
         Progress.Value = 0;
         Progress.Maximum = 1;
@@ -674,6 +696,13 @@ public partial class MainWindow : Window
 
             var progress = new Progress<LaunchProgress>(p =>
             {
+                // 取消后/游戏已启动后，迟到的进度回调不要覆盖状态栏。
+                // 先看 _launchCts 是否还是自己，避免 finally 里 Dispose 后还被回调访问。
+                if (!ReferenceEquals(_launchCts, cts) || cts.IsCancellationRequested || _gameProcess is not null)
+                {
+                    return;
+                }
+
                 Progress.Maximum = Math.Max(p.Total, 1);
                 Progress.Value = p.Done;
                 StatusText.Text = $"{p.Stage} {p.Done}/{p.Total}";
@@ -685,7 +714,11 @@ public partial class MainWindow : Window
                 options,
                 message => Dispatcher.Invoke(() => Log(message)),
                 progress,
-                onFailure);
+                onFailure,
+                cts.Token);
+
+            // 下载完了但用户刚好点了取消：不要再把游戏拉起来
+            cts.Token.ThrowIfCancellationRequested();
 
             Log($"命令行：{result.CommandLine.Length} 字符");
             StartGame(result);
@@ -706,6 +739,12 @@ public partial class MainWindow : Window
 
             RefreshMods();
         }
+        catch (OperationCanceledException)
+        {
+            Log("已取消启动");
+            StatusText.Text = "已取消";
+            Progress.Value = 0;
+        }
         catch (Exception ex)
         {
             LogError("启动失败", ex);
@@ -714,7 +753,23 @@ public partial class MainWindow : Window
         }
         finally
         {
-            LaunchButton.IsEnabled = _gameProcess is null;
+            if (ReferenceEquals(_launchCts, cts))
+            {
+                _launchCts = null;
+            }
+
+            cts.Dispose();
+
+            if (_gameProcess is null)
+            {
+                LaunchButton.Content = "启动游戏";
+                LaunchButton.IsEnabled = true;
+            }
+            else
+            {
+                LaunchButton.Content = "游戏运行中…";
+                LaunchButton.IsEnabled = false;
+            }
         }
     }
 

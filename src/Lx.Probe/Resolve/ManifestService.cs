@@ -12,7 +12,8 @@ public static class ManifestService
 
     public static async Task<VersionManifest> EnsureManifestAsync(
         string installRoot,
-        Func<string, string>? rewriteUrl = null)
+        Func<string, string>? rewriteUrl = null,
+        CancellationToken cancellationToken = default)
     {
         string path = Path.Combine(installRoot, "version_manifest_v2.json");
         if (!File.Exists(path))
@@ -20,8 +21,10 @@ public static class ManifestService
             Directory.CreateDirectory(installRoot);
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
             string url = rewriteUrl?.Invoke(ManifestUrl) ?? ManifestUrl;
-            string json = await http.GetStringAsync(url).ConfigureAwait(false);
-            await File.WriteAllTextAsync(path, json).ConfigureAwait(false);
+            string json = await http.GetStringAsync(url, cancellationToken).ConfigureAwait(false);
+            string temp = path + ".part";
+            await File.WriteAllTextAsync(temp, json, cancellationToken).ConfigureAwait(false);
+            File.Move(temp, path, overwrite: true);
         }
 
         return JsonSerializer.Deserialize<VersionManifest>(File.ReadAllText(path), Options)
@@ -62,7 +65,8 @@ public static class ManifestService
         VersionManifest manifest,
         string versionId,
         string installRoot,
-        Func<string, string>? rewriteUrl = null)
+        Func<string, string>? rewriteUrl = null,
+        CancellationToken cancellationToken = default)
     {
         string dir = Path.Combine(installRoot, "versions", versionId);
         string path = Path.Combine(dir, versionId + ".json");
@@ -96,8 +100,10 @@ public static class ManifestService
         Directory.CreateDirectory(dir);
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
         string url = rewriteUrl?.Invoke(entry.Url) ?? entry.Url;
-        string json = await http.GetStringAsync(url).ConfigureAwait(false);
-        await File.WriteAllTextAsync(path, json).ConfigureAwait(false);
+        string json = await http.GetStringAsync(url, cancellationToken).ConfigureAwait(false);
+        string temp = path + ".part";
+        await File.WriteAllTextAsync(temp, json, cancellationToken).ConfigureAwait(false);
+        File.Move(temp, path, overwrite: true);
 
         return path;
     }

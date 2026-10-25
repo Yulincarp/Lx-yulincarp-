@@ -14,7 +14,8 @@ public static class Downloader
         string installRoot,
         int concurrency = 8,
         Action<int, int>? onProgress = null,
-        Action<DownloadFailure>? onFailure = null)
+        Action<DownloadFailure>? onFailure = null,
+        CancellationToken cancellationToken = default)
     {
         int ok = 0;
         int skipped = 0;
@@ -27,7 +28,7 @@ public static class Downloader
 
         async Task ProcessOneAsync(DownloadItem item)
         {
-            await gate.WaitAsync().ConfigureAwait(false);
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 string dest = Path.Combine(installRoot, item.RelativePath.Replace('/', Path.DirectorySeparatorChar));
@@ -41,7 +42,7 @@ public static class Downloader
 
                 Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
 
-                DownloadFailure? failure = await TryDownloadAsync(item, dest).ConfigureAwait(false);
+                DownloadFailure? failure = await TryDownloadAsync(item, dest, cancellationToken).ConfigureAwait(false);
                 if (failure is null)
                 {
                     Interlocked.Increment(ref ok);
@@ -77,16 +78,20 @@ public static class Downloader
     }
 
     // 很多 maven 仓库旁边放一个 .sha1 文件，Forge 的库就是靠这个补校验值。
-    private static async Task<string> TryFetchSha1Async(string url)
+    private static async Task<string> TryFetchSha1Async(string url, CancellationToken cancellationToken)
     {
         try
         {
-            string text = (await Http.GetStringAsync(url + ".sha1").ConfigureAwait(false)).Trim();
+            string text = (await Http.GetStringAsync(url + ".sha1", cancellationToken).ConfigureAwait(false)).Trim();
             if (text.Length >= 40)
             {
                 string candidate = text[..40];
                 return candidate.All(Uri.IsHexDigit) ? candidate : string.Empty;
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
@@ -97,17 +102,21 @@ public static class Downloader
     }
 
     // 最多试 3 次；4xx 除了 429 都不重试（重试也不会变好）。
-    private static async Task<DownloadFailure?> TryDownloadAsync(DownloadItem item, string dest)
+    private static async Task<DownloadFailure?> TryDownloadAsync(
+        DownloadItem item,
+        string dest,
+        CancellationToken cancellationToken)
     {
         string temp = dest + ".part";
         DownloadFailure? last = null;
 
         for (int attempt = 1; attempt <= 3; attempt++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             try
             {
                 using HttpResponseMessage response = await Http
-                    .GetAsync(item.Url, HttpCompletionOption.ResponseHeadersRead)
+                    .GetAsync(item.Url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                     .ConfigureAwait(false);
 
                 if (!response.IsSuccessStatusCode)
@@ -122,16 +131,16 @@ public static class Downloader
                     throw new HttpRequestException($"HTTP {status}");
                 }
 
-                await using (Stream body = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                await using (Stream body = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
                 await using (FileStream output = File.Create(temp))
                 {
-                    await body.CopyToAsync(output).ConfigureAwait(false);
+                    await body.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
                 }
 
                 string expectedSha1 = item.Sha1;
                 if (expectedSha1.Length == 0)
                 {
-                    expectedSha1 = await TryFetchSha1Async(item.Url).ConfigureAwait(false);
+                    expectedSha1 = await TryFetchSha1Async(item.Url, cancellationToken).ConfigureAwait(false);
                 }
 
                 if (expectedSha1.Length == 0)
@@ -155,6 +164,10 @@ public static class Downloader
                 File.Move(temp, dest, overwrite: true);
                 return null;
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex) when (ex is HttpRequestException or IOException or TaskCanceledException)
             {
                 last = new DownloadFailure(
@@ -169,7 +182,7 @@ public static class Downloader
                 }
 
                 // 1s → 2s → 4s
-                await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1))).ConfigureAwait(false);
+                await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)), cancellationToken).ConfigureAwait(false);
             }
         }
 

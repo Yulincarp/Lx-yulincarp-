@@ -11,15 +11,16 @@ public static class FabricInstaller
     public static async Task<(string Id, string JsonPath)> InstallAsync(
         string gameVersion,
         string installRoot,
-        string? loaderVersion = null)
+        string? loaderVersion = null,
+        CancellationToken cancellationToken = default)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
 
-        loaderVersion ??= await LatestStableLoaderAsync(http, gameVersion);
+        loaderVersion ??= await LatestStableLoaderAsync(http, gameVersion, cancellationToken);
 
         string profileUrl = $"{MetaBase}/{gameVersion}/{loaderVersion}/profile/json";
-        string profileJson = await http.GetStringAsync(profileUrl).ConfigureAwait(false);
-        profileJson = await FillMissingSha1Async(http, profileJson).ConfigureAwait(false);
+        string profileJson = await http.GetStringAsync(profileUrl, cancellationToken).ConfigureAwait(false);
+        profileJson = await FillMissingSha1Async(http, profileJson, cancellationToken).ConfigureAwait(false);
 
         string id;
         using (JsonDocument profile = JsonDocument.Parse(profileJson))
@@ -39,14 +40,19 @@ public static class FabricInstaller
         string dir = Path.Combine(installRoot, "versions", id);
         Directory.CreateDirectory(dir);
         string path = Path.Combine(dir, id + ".json");
-        await File.WriteAllTextAsync(path, merged).ConfigureAwait(false);
+        string temp = path + ".part";
+        await File.WriteAllTextAsync(temp, merged, cancellationToken).ConfigureAwait(false);
+        File.Move(temp, path, overwrite: true);
 
         Console.WriteLine($"Fabric {loaderVersion} 已合并到 {id}");
         return (id, path);
     }
 
     // Fabric 的 meta 里 fabric-loader / intermediary 不带 sha1，但 maven 仓库有 .sha1 旁文件。
-    private static async Task<string> FillMissingSha1Async(HttpClient http, string profileJson)
+    private static async Task<string> FillMissingSha1Async(
+        HttpClient http,
+        string profileJson,
+        CancellationToken cancellationToken)
     {
         JsonNode? root = JsonNode.Parse(profileJson);
         JsonArray? libraries = root?["libraries"] as JsonArray;
@@ -73,7 +79,7 @@ public static class FabricInstaller
             string shaUrl = library["url"]!.GetValue<string>().TrimEnd('/') + "/" + path + ".sha1";
             try
             {
-                string sha1 = (await http.GetStringAsync(shaUrl).ConfigureAwait(false)).Trim();
+                string sha1 = (await http.GetStringAsync(shaUrl, cancellationToken).ConfigureAwait(false)).Trim();
                 if (sha1.Length == 40)
                 {
                     library["sha1"] = sha1;
@@ -88,9 +94,12 @@ public static class FabricInstaller
         return root!.ToJsonString();
     }
 
-    private static async Task<string> LatestStableLoaderAsync(HttpClient http, string gameVersion)
+    private static async Task<string> LatestStableLoaderAsync(
+        HttpClient http,
+        string gameVersion,
+        CancellationToken cancellationToken)
     {
-        string json = await http.GetStringAsync($"{MetaBase}/{gameVersion}").ConfigureAwait(false);
+        string json = await http.GetStringAsync($"{MetaBase}/{gameVersion}", cancellationToken).ConfigureAwait(false);
 
         using JsonDocument document = JsonDocument.Parse(json);
         JsonElement? fallback = null;

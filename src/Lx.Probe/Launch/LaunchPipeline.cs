@@ -38,7 +38,8 @@ public static class LaunchPipeline
         LaunchOptions options,
         Action<string> log,
         IProgress<LaunchProgress>? progress = null,
-        Action<DownloadFailure>? onDownloadFailure = null)
+        Action<DownloadFailure>? onDownloadFailure = null,
+        CancellationToken cancellationToken = default)
     {
         string installRoot = options.InstallRoot;
         LaunchSettings settings = SettingsStore.Load(installRoot);
@@ -46,18 +47,20 @@ public static class LaunchPipeline
         Func<string, string> rewriteUrl = url => DownloadUrlRewriter.Rewrite(url, source);
         log($"下载源：{DownloadUrlRewriter.Describe(source)}");
 
-        VersionManifest manifest = await ManifestService.EnsureManifestAsync(installRoot, rewriteUrl).ConfigureAwait(false);
+        VersionManifest manifest = await ManifestService
+            .EnsureManifestAsync(installRoot, rewriteUrl, cancellationToken)
+            .ConfigureAwait(false);
 
         string versionId = options.VersionId;
         string versionJsonPath = await ManifestService
-            .EnsureVersionJsonAsync(manifest, versionId, installRoot, rewriteUrl)
+            .EnsureVersionJsonAsync(manifest, versionId, installRoot, rewriteUrl, cancellationToken)
             .ConfigureAwait(false);
 
         if (string.Equals(options.Loader, "fabric", StringComparison.OrdinalIgnoreCase))
         {
             log($"正在合并 Fabric（{options.LoaderVersion ?? "最新稳定版"}）…");
             (versionId, versionJsonPath) = await FabricInstaller
-                .InstallAsync(versionId, installRoot, options.LoaderVersion)
+                .InstallAsync(versionId, installRoot, options.LoaderVersion, cancellationToken)
                 .ConfigureAwait(false);
             log($"Fabric 已合并到 {versionId}");
         }
@@ -105,7 +108,8 @@ public static class LaunchPipeline
             installRoot,
             8,
             (done, total) => progress?.Report(new LaunchProgress("游戏文件", done, total)),
-            ReportFailure).ConfigureAwait(false);
+            ReportFailure,
+            cancellationToken).ConfigureAwait(false);
         log($"游戏文件下载完成，失败 {failed} 个");
 
         string assetsDir = Path.Combine(installRoot, "assets");
@@ -117,7 +121,8 @@ public static class LaunchPipeline
             installRoot,
             8,
             (done, total) => progress?.Report(new LaunchProgress("assets", done, total)),
-            ReportFailure).ConfigureAwait(false);
+            ReportFailure,
+            cancellationToken).ConfigureAwait(false);
         log($"assets 下载完成，失败 {failedAssets} 个");
 
         var allFiles = new List<DownloadItem>(manifestItems);
@@ -239,7 +244,9 @@ public static class LaunchPipeline
         }
         else
         {
-            javaExe = await JavaRuntime.EnsureJavaAsync(installRoot, javaMajor, version.JavaVersion?.Component, log, rewriteUrl).ConfigureAwait(false);
+            javaExe = await JavaRuntime
+                .EnsureJavaAsync(installRoot, javaMajor, version.JavaVersion?.Component, log, rewriteUrl, cancellationToken)
+                .ConfigureAwait(false);
         }
         string commandLine = CommandLineBuilder.Build(javaExe, jvmArgs, version.MainClass ?? string.Empty, gameArgs);
 

@@ -23,7 +23,8 @@ public static class JavaRuntime
         int requiredMajor,
         string? component,
         Action<string> log,
-        Func<string, string>? rewriteUrl = null)
+        Func<string, string>? rewriteUrl = null,
+        CancellationToken cancellationToken = default)
     {
         string platform = OperatingSystem.IsWindows() ? "windows-x64" : "linux";
 
@@ -49,7 +50,7 @@ public static class JavaRuntime
         }
 
         log($"需要 Java {requiredMajor}，本机没有；下载 Mojang 运行时 {component}（首次约 150 MB）…");
-        await DownloadRuntimeAsync(runtimeDir, component, platform, log, rewriteUrl).ConfigureAwait(false);
+        await DownloadRuntimeAsync(runtimeDir, component, platform, log, rewriteUrl, cancellationToken).ConfigureAwait(false);
 
         if (!File.Exists(exePath))
         {
@@ -74,10 +75,11 @@ public static class JavaRuntime
         string component,
         string platform,
         Action<string> log,
-        Func<string, string>? rewriteUrl = null)
+        Func<string, string>? rewriteUrl = null,
+        CancellationToken cancellationToken = default)
     {
         string allRuntimesUrl = rewriteUrl?.Invoke(AllRuntimesUrl) ?? AllRuntimesUrl;
-        JsonNode root = JsonNode.Parse(await Http.GetStringAsync(allRuntimesUrl).ConfigureAwait(false))!;
+        JsonNode root = JsonNode.Parse(await Http.GetStringAsync(allRuntimesUrl, cancellationToken).ConfigureAwait(false))!;
         JsonNode? entry = (root[platform]?[component] as JsonArray)?.FirstOrDefault();
         string? manifestUrl = entry?["manifest"]?["url"]?.GetValue<string>();
 
@@ -87,7 +89,7 @@ public static class JavaRuntime
         }
 
         string runtimeManifestUrl = rewriteUrl?.Invoke(manifestUrl) ?? manifestUrl;
-        JsonNode manifest = JsonNode.Parse(await Http.GetStringAsync(runtimeManifestUrl).ConfigureAwait(false))!;
+        JsonNode manifest = JsonNode.Parse(await Http.GetStringAsync(runtimeManifestUrl, cancellationToken).ConfigureAwait(false))!;
         if (manifest["files"] is not JsonObject files)
         {
             throw new InvalidOperationException("运行时清单格式不对");
@@ -116,7 +118,11 @@ public static class JavaRuntime
         }
 
         log($"运行时文件：{items.Count} 个");
-        int failed = await Downloader.DownloadAllAsync(items, runtimeDir, concurrency: 8).ConfigureAwait(false);
+        int failed = await Downloader.DownloadAllAsync(
+            items,
+            runtimeDir,
+            concurrency: 8,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
         if (failed > 0)
         {
             throw new InvalidOperationException($"运行时下载失败 {failed} 个文件");
