@@ -42,7 +42,29 @@ public static class Downloader
 
                 Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
 
-                DownloadFailure? failure = await TryDownloadAsync(item, dest, cancellationToken).ConfigureAwait(false);
+                DownloadFailure? failure = await TryDownloadAsync(item, item.Url, dest, cancellationToken).ConfigureAwait(false);
+
+                // 镜像失败（403/404/超时）就回退到官方源再试一次，成功就不算失败。
+                if (failure is not null &&
+                    item.FallbackUrl is { Length: > 0 } fallback &&
+                    !string.Equals(fallback, item.Url, StringComparison.OrdinalIgnoreCase) &&
+                    !cancellationToken.IsCancellationRequested)
+                {
+                    Console.WriteLine($"[回退] {item.RelativePath} → 官方源");
+                    DownloadFailure? fallbackFailure = await TryDownloadAsync(item, fallback, dest, cancellationToken).ConfigureAwait(false);
+                    if (fallbackFailure is null)
+                    {
+                        Interlocked.Increment(ref ok);
+                        return;
+                    }
+
+                    failure = new DownloadFailure(
+                        fallbackFailure.Url,
+                        fallbackFailure.RelativePath,
+                        fallbackFailure.StatusCode,
+                        fallbackFailure.Reason + "（镜像和官方源都失败）");
+                }
+
                 if (failure is null)
                 {
                     Interlocked.Increment(ref ok);
@@ -104,6 +126,7 @@ public static class Downloader
     // 最多试 3 次；4xx 除了 429 都不重试（重试也不会变好）。
     private static async Task<DownloadFailure?> TryDownloadAsync(
         DownloadItem item,
+        string url,
         string dest,
         CancellationToken cancellationToken)
     {
@@ -116,14 +139,16 @@ public static class Downloader
             try
             {
                 using HttpResponseMessage response = await Http
-                    .GetAsync(item.Url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                    .GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                     .ConfigureAwait(false);
 
                 if (!response.IsSuccessStatusCode)
                 {
                     int status = (int)response.StatusCode;
-                    last = new DownloadFailure(item.Url, item.RelativePath, status, $"HTTP {status}");
-                    if (status is >= 400 and < 500 and not 429)
+                    last = new DownloadFailure(url, item.RelativePath, status, $"HTTP {status}");
+
+                    // 403/429 多半是镜像限流，值得退避重试；其他 4xx 直接放弃。
+                    if (status >= 400 && status < 500 && status != 403 && status != 429)
                     {
                         return last;
                     }
@@ -140,12 +165,12 @@ public static class Downloader
                 string expectedSha1 = item.Sha1;
                 if (expectedSha1.Length == 0)
                 {
-                    expectedSha1 = await TryFetchSha1Async(item.Url, cancellationToken).ConfigureAwait(false);
+                    expectedSha1 = await TryFetchSha1Async(url, cancellationToken).ConfigureAwait(false);
                 }
 
                 if (expectedSha1.Length == 0)
                 {
-                    Console.WriteLine($"[警告] 没有 sha1，跳过校验：{item.Url}");
+                    Console.WriteLine($"[警告] 没有 sha1，跳过校验：{url}");
                 }
                 else
                 {
@@ -154,7 +179,7 @@ public static class Downloader
                     {
                         TryDelete(temp);
                         return new DownloadFailure(
-                            item.Url,
+                            url,
                             item.RelativePath,
                             null,
                             $"sha1 不符（期望 {Short(expectedSha1)}，实际 {Short(actualSha1)}）");
@@ -171,7 +196,7 @@ public static class Downloader
             catch (Exception ex) when (ex is HttpRequestException or IOException or TaskCanceledException)
             {
                 last = new DownloadFailure(
-                    item.Url,
+                    url,
                     item.RelativePath,
                     last?.StatusCode,
                     $"{ex.GetType().Name}: {ex.Message}");

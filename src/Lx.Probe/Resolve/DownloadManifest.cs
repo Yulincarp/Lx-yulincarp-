@@ -4,7 +4,12 @@ using Lx.Probe.Model;
 namespace Lx.Probe.Resolve;
 
 // M2 Step 1：把 version.json 算成一张下载清单，不碰网络、不碰文件。
-public sealed record DownloadItem(string Url, string RelativePath, string Sha1, long Size);
+public sealed record DownloadItem(
+    string Url,
+    string RelativePath,
+    string Sha1,
+    long Size,
+    string? FallbackUrl = null);
 
 public static class DownloadManifest
 {
@@ -44,7 +49,8 @@ public static class DownloadManifest
             }
 
             string finalUrl = rewriteUrl?.Invoke(url) ?? url;
-            items.Add(new DownloadItem(finalUrl, "libraries/" + path, sha1, artifact.Size));
+            string? fallback = string.Equals(finalUrl, url, StringComparison.OrdinalIgnoreCase) ? null : url;
+            items.Add(new DownloadItem(finalUrl, "libraries/" + path, sha1, artifact.Size, fallback));
         }
 
         LibraryArtifact? client = version.Downloads?.Client;
@@ -56,7 +62,8 @@ public static class DownloadManifest
             {
                 string clientVersionId = version.InheritsFrom ?? versionId;
                 string finalUrl = rewriteUrl?.Invoke(url) ?? url;
-                items.Add(new DownloadItem(finalUrl, $"versions/{clientVersionId}/{clientVersionId}.jar", sha1, client.Size));
+                string? fallback = string.Equals(finalUrl, url, StringComparison.OrdinalIgnoreCase) ? null : url;
+                items.Add(new DownloadItem(finalUrl, $"versions/{clientVersionId}/{clientVersionId}.jar", sha1, client.Size, fallback));
             }
         }
 
@@ -64,7 +71,8 @@ public static class DownloadManifest
         if (assetIndex?.Url is not null && assetIndex.Sha1 is not null && assetIndex.Id is not null)
         {
             string finalUrl = rewriteUrl?.Invoke(assetIndex.Url) ?? assetIndex.Url;
-            items.Add(new DownloadItem(finalUrl, $"assets/indexes/{assetIndex.Id}.json", assetIndex.Sha1, assetIndex.Size));
+            string? fallback = string.Equals(finalUrl, assetIndex.Url, StringComparison.OrdinalIgnoreCase) ? null : assetIndex.Url;
+            items.Add(new DownloadItem(finalUrl, $"assets/indexes/{assetIndex.Id}.json", assetIndex.Sha1, assetIndex.Size, fallback));
         }
 
         return items;
@@ -92,11 +100,14 @@ public static class DownloadManifest
 
             string prefix = hash[..2];
             string url = $"https://resources.download.minecraft.net/{prefix}/{hash}";
+            string finalUrl = rewriteUrl?.Invoke(url) ?? url;
+            string? fallback = string.Equals(finalUrl, url, StringComparison.OrdinalIgnoreCase) ? null : url;
             items.Add(new DownloadItem(
-                rewriteUrl?.Invoke(url) ?? url,
+                finalUrl,
                 $"assets/objects/{prefix}/{hash}",
                 hash,
-                pair.Value.Size));
+                pair.Value.Size,
+                fallback));
         }
 
         return items;

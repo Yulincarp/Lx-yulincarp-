@@ -110,11 +110,14 @@ public static class JavaRuntime
                 continue;
             }
 
+            string finalUrl = rewriteUrl?.Invoke(url) ?? url;
+            string? fallback = string.Equals(finalUrl, url, StringComparison.OrdinalIgnoreCase) ? null : url;
             items.Add(new DownloadItem(
-                rewriteUrl?.Invoke(url) ?? url,
+                finalUrl,
                 relative.Replace('/', Path.DirectorySeparatorChar),
                 raw?["sha1"]?.GetValue<string>() ?? string.Empty,
-                raw?["size"]?.GetValue<long>() ?? 0));
+                raw?["size"]?.GetValue<long>() ?? 0,
+                fallback));
         }
 
         log($"运行时文件：{items.Count} 个");
