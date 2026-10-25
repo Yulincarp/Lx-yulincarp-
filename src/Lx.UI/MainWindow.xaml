@@ -9,22 +9,43 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Orientation="Horizontal">
-            <TextBlock Text="版本" VerticalAlignment="Center" Margin="0,0,6,0"/>
-            <ComboBox x:Name="VersionBox" Width="150" VerticalAlignment="Center"
-                      SelectionChanged="Version_Changed"/>
-            <CheckBox x:Name="FabricCheck" Content="Fabric" Margin="16,0,0,0" VerticalAlignment="Center"
-                      Checked="Version_Changed" Unchecked="Version_Changed"/>
-            <TextBlock Text="账号" VerticalAlignment="Center" Margin="24,0,6,0"/>
-            <ComboBox x:Name="AccountBox" Width="170" VerticalAlignment="Center" DisplayMemberPath="Name"/>
-            <TextBlock Text="离线名" VerticalAlignment="Center" Margin="24,0,6,0"/>
-            <TextBox x:Name="NameBox" Width="100" VerticalAlignment="Center"/>
-            <Button Content="添加" Margin="8,0,0,0" Padding="10,3" Click="AddAccount_Click"/>
-            <Button Content="登录" Margin="8,0,0,0" Padding="10,3" Click="Login_Click"/>
-            <Button Content="正版登录" Margin="8,0,0,0" Padding="10,3" Click="MicrosoftLogin_Click"/>
-            <Button Content="切换角色" Margin="8,0,0,0" Padding="10,3" Click="SwitchRole_Click"/>
-            <Button Content="设置" Margin="8,0,0,0" Padding="10,3" Click="Settings_Click"/>
-        </StackPanel>
+        <WrapPanel Grid.Row="0">
+            <StackPanel Orientation="Horizontal" Margin="0,0,12,6">
+                <TextBlock Text="版本" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <ComboBox x:Name="VersionBox" Width="130" VerticalAlignment="Center"
+                          SelectionChanged="Version_Changed"/>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,12,6">
+                <TextBlock Text="加载器" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <ComboBox x:Name="LoaderBox" Width="80" VerticalAlignment="Center" SelectedIndex="0"
+                          SelectionChanged="Loader_Changed">
+                    <ComboBoxItem Content="原版"/>
+                    <ComboBoxItem Content="Fabric"/>
+                </ComboBox>
+                <ComboBox x:Name="LoaderVersionBox" Width="140" Margin="6,0,0,0" VerticalAlignment="Center"
+                          IsEnabled="False" DisplayMemberPath="Display"
+                          ToolTip="Fabric 加载器版本；老版本或快照可手动选旧版"/>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,12,6">
+                <TextBlock Text="账号" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <ComboBox x:Name="AccountBox" Width="140" VerticalAlignment="Center" DisplayMemberPath="Name"/>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,12,6">
+                <TextBlock Text="离线名" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBox x:Name="NameBox" Width="80" VerticalAlignment="Center"/>
+                <Button Content="添加" Margin="8,0,0,0" Padding="8,3" Click="AddAccount_Click"/>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <Button Content="登录" Padding="8,3" Click="Login_Click"/>
+                <Button Content="正版登录" Margin="8,0,0,0" Padding="8,3" Click="MicrosoftLogin_Click"/>
+                <Button Content="切换角色" Margin="8,0,0,0" Padding="8,3" Click="SwitchRole_Click"/>
+                <Button Content="设置" Margin="8,0,0,0" Padding="8,3" Click="Settings_Click"/>
+            </StackPanel>
+        </WrapPanel>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,12,0,0">
             <Button x:Name="LaunchButton" Content="启动游戏" Padding="20,6" Click="Launch_Click"/>

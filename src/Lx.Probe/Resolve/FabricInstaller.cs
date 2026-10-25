@@ -4,9 +4,46 @@ using System.Text.Json.Nodes;
 namespace Lx.Probe.Resolve;
 
 // 从 Fabric 官方 meta 取 loader profile，合并进原版 version.json，写到 versions/<id>/ 下。
+public sealed record FabricLoaderVersion(string Version, bool Stable)
+{
+    public string Display => Stable ? $"{Version}（稳定）" : Version;
+}
+
 public static class FabricInstaller
 {
     private const string MetaBase = "https://meta.fabricmc.net/v2/versions/loader";
+
+    // 给设置页/主界面用：列出某个游戏版本可用的 Fabric Loader 版本（meta 顺序：新到旧）。
+    public static async Task<List<FabricLoaderVersion>> GetLoaderVersionsAsync(
+        string gameVersion,
+        CancellationToken cancellationToken = default)
+    {
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        string json = await http.GetStringAsync($"{MetaBase}/{gameVersion}", cancellationToken).ConfigureAwait(false);
+
+        using JsonDocument document = JsonDocument.Parse(json);
+        var versions = new List<FabricLoaderVersion>();
+        foreach (JsonElement entry in document.RootElement.EnumerateArray())
+        {
+            if (!entry.TryGetProperty("loader", out JsonElement loader) ||
+                !loader.TryGetProperty("version", out JsonElement versionElement))
+            {
+                continue;
+            }
+
+            string? version = versionElement.GetString();
+            if (version is null)
+            {
+                continue;
+            }
+
+            bool stable = loader.TryGetProperty("stable", out JsonElement stableElement) &&
+                          stableElement.ValueKind == JsonValueKind.True;
+            versions.Add(new FabricLoaderVersion(version, stable));
+        }
+
+        return versions;
+    }
 
     public static async Task<(string Id, string JsonPath)> InstallAsync(
         string gameVersion,

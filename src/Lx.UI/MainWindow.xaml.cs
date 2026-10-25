@@ -35,6 +35,11 @@ public partial class MainWindow : Window
     private DateTime _launchStartedAt;
     private bool _closing;
 
+    private readonly Dictionary<string, List<FabricLoaderVersion>> _loaderVersionCache = new();
+    private int _loaderVersionRequest;
+
+    private bool IsFabricSelected => LoaderBox.SelectedIndex == 1;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -237,7 +242,8 @@ public partial class MainWindow : Window
             }
         }
 
-        FabricCheck.IsChecked = string.Equals(instance.Loader, "fabric", StringComparison.OrdinalIgnoreCase);
+        LoaderBox.SelectedIndex = string.Equals(instance.Loader, "fabric", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+        _ = ReloadLoaderVersionsAsync(instance.LoaderVersion);
 
         if (instance.AccountName is not null && AccountBox.ItemsSource is List<Account> accounts)
         {
@@ -273,11 +279,20 @@ public partial class MainWindow : Window
             return;
         }
 
+        string? loader = IsFabricSelected ? "fabric" : null;
+        string? loaderVersion = IsFabricSelected ? (LoaderVersionBox.SelectedItem as FabricLoaderVersion)?.Version : null;
+        if (IsFabricSelected && loaderVersion is null)
+        {
+            Log("Fabric 版本列表还没加载好，等下拉框里有版本再试");
+            return;
+        }
+
         var instance = new Instance(
             name,
             version,
-            FabricCheck.IsChecked == true ? "fabric" : null,
-            (AccountBox.SelectedItem as Account)?.Name);
+            loader,
+            (AccountBox.SelectedItem as Account)?.Name,
+            loaderVersion);
 
         InstanceStore.AddOrUpdate(_installRoot, instance);
         NewInstanceName.Text = string.Empty;
@@ -406,7 +421,7 @@ public partial class MainWindow : Window
         string version = (VersionBox.SelectedItem as ManifestVersion)?.Id ?? "1.20.4";
         string versionsDir = Path.Combine(_installRoot, "versions");
 
-        if (FabricCheck.IsChecked == true && Directory.Exists(versionsDir))
+        if (IsFabricSelected && Directory.Exists(versionsDir))
         {
             string? fabric = Directory
                 .EnumerateDirectories(versionsDir, $"fabric-loader-*-{version}")
@@ -420,7 +435,84 @@ public partial class MainWindow : Window
         return Path.Combine(versionsDir, version);
     }
 
-    private void Version_Changed(object sender, RoutedEventArgs e) => RefreshMods();
+    private void Version_Changed(object sender, RoutedEventArgs e)
+    {
+        RefreshMods();
+        _ = ReloadLoaderVersionsAsync(null);
+    }
+
+    private void Loader_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (LoaderVersionBox is null)
+        {
+            return;
+        }
+
+        if (!IsFabricSelected)
+        {
+            LoaderVersionBox.ItemsSource = null;
+            LoaderVersionBox.IsEnabled = false;
+            return;
+        }
+
+        _ = ReloadLoaderVersionsAsync(null);
+    }
+
+    private async Task ReloadLoaderVersionsAsync(string? preferredVersion)
+    {
+        int request = ++_loaderVersionRequest;
+        if (!IsFabricSelected)
+        {
+            LoaderVersionBox.ItemsSource = null;
+            LoaderVersionBox.IsEnabled = false;
+            return;
+        }
+
+        string? versionId = (VersionBox.SelectedItem as ManifestVersion)?.Id;
+        if (versionId is null)
+        {
+            return;
+        }
+
+        LoaderVersionBox.IsEnabled = false;
+        try
+        {
+            if (!_loaderVersionCache.TryGetValue(versionId, out List<FabricLoaderVersion>? versions))
+            {
+                versions = await FabricInstaller.GetLoaderVersionsAsync(versionId);
+                _loaderVersionCache[versionId] = versions;
+            }
+
+            if (request != _loaderVersionRequest)
+            {
+                return;
+            }
+
+            LoaderVersionBox.ItemsSource = versions;
+            FabricLoaderVersion? selected = preferredVersion is null
+                ? null
+                : versions.FirstOrDefault(v => string.Equals(v.Version, preferredVersion, StringComparison.OrdinalIgnoreCase));
+            selected ??= versions.FirstOrDefault(v => v.Stable) ?? versions.FirstOrDefault();
+            LoaderVersionBox.SelectedItem = selected;
+            LoaderVersionBox.IsEnabled = versions.Count > 0;
+
+            if (versions.Count == 0)
+            {
+                Log($"Fabric 没有支持 {versionId} 的加载器版本");
+            }
+        }
+        catch (Exception ex)
+        {
+            if (request != _loaderVersionRequest)
+            {
+                return;
+            }
+
+            LogError($"获取 Fabric 版本列表失败（{versionId}）", ex);
+            LoaderVersionBox.ItemsSource = null;
+            LoaderVersionBox.IsEnabled = false;
+        }
+    }
 
     // ---------- mods ----------
 
@@ -657,6 +749,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        string? loader = IsFabricSelected ? "fabric" : null;
+        string? loaderVersion = IsFabricSelected ? (LoaderVersionBox.SelectedItem as FabricLoaderVersion)?.Version : null;
+        if (IsFabricSelected && string.IsNullOrEmpty(loaderVersion))
+        {
+            Log("Fabric 版本列表还没加载好，等下拉框里有版本再启动");
+            return;
+        }
+
         _downloadFailures.Clear();
         CopyFailuresButton.IsEnabled = false;
         CopyFailuresButton.Content = "复制失败清单";
@@ -681,7 +781,8 @@ public partial class MainWindow : Window
                 InstanceStore.AddOrUpdate(_installRoot, instance with
                 {
                     VersionId = version.Id,
-                    Loader = FabricCheck.IsChecked == true ? "fabric" : null,
+                    Loader = loader,
+                    LoaderVersion = loaderVersion,
                     AccountName = account.Name,
                 });
             }
@@ -689,8 +790,8 @@ public partial class MainWindow : Window
             var options = new LaunchOptions(
                 _installRoot,
                 version.Id,
-                FabricCheck.IsChecked == true ? "fabric" : null,
-                null,
+                loader,
+                loaderVersion,
                 gameDir,
                 account);
 

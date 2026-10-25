@@ -4,7 +4,12 @@ namespace Lx.Probe.Instances;
 
 // 一个实例 = 一个独立的游戏目录（存档、mods、options 各自独立），
 // 共享安装根下的 libraries / assets / versions。
-public sealed record Instance(string Name, string VersionId, string? Loader, string? AccountName);
+public sealed record Instance(
+    string Name,
+    string VersionId,
+    string? Loader,
+    string? AccountName,
+    string? LoaderVersion = null);
 
 public static class InstanceStore
 {
