@@ -276,14 +276,16 @@ public static class LaunchPipeline
                 log($"ignoreList 追加 {clientFileName}");
             }
         }
-        if (account.Type == "yggdrasil")
+        if (string.Equals(account.Type, "yggdrasil", StringComparison.OrdinalIgnoreCase))
         {
-            string injector = Path.Combine(installRoot, "authlib-injector.jar");
-            if (!File.Exists(injector))
+            if (string.IsNullOrEmpty(account.ApiRoot))
             {
-                throw new InvalidOperationException($"缺少 {injector}");
+                throw new InvalidOperationException("外置账号缺少站点地址，请重新登录");
             }
 
+            string injector = await AuthlibInjector
+                .EnsureAsync(installRoot, log, source, cancellationToken)
+                .ConfigureAwait(false);
             jvmArgs.Insert(0, $"-javaagent:{injector}={account.ApiRoot}");
         }
 
