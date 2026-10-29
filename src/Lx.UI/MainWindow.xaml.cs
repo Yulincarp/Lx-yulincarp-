@@ -229,6 +229,101 @@ public partial class MainWindow : Window
         RefreshSettingsSummary();
     }
 
+    private async void ChangeDataDirectory_Click(object sender, RoutedEventArgs e)
+    {
+        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("LX_DATA_DIR")))
+        {
+            MessageBox.Show(
+                "当前启动器由 LX_DATA_DIR 环境变量指定数据目录，设置里的更改会被环境变量覆盖。\n\n请先移除 LX_DATA_DIR，再更改数据目录。",
+                "更改数据目录",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        if (_gameProcess is { } running && !running.HasExited)
+        {
+            Log("游戏运行中，先退出游戏再更改数据目录");
+            return;
+        }
+
+        var dialog = new OpenFolderDialog
+        {
+            Title = "选择新的数据目录（必须为空目录）",
+            InitialDirectory = Path.GetDirectoryName(_installRoot) ?? _installRoot,
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        string target = dialog.FolderName;
+        MessageBoxResult confirm = MessageBox.Show(
+            $"当前数据目录：{_installRoot}\n\n新数据目录：{target}\n\n" +
+            "会完整复制所有数据（包括日志），旧目录保留作为备份，完成后重启生效。现在开始吗？",
+            "更改数据目录",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        StatusText.Text = "正在迁移数据目录…";
+        var progress = new Progress<DataDirectoryMoveProgress>(p =>
+        {
+            StatusText.Text = $"迁移 {p.FilesCopied} 个文件 / {p.BytesCopied / 1024.0 / 1024.0:F1} MB";
+        });
+
+        try
+        {
+            DataDirectoryMoveProgress result = await DataDirectoryMigrator.MigrateAsync(
+                _installRoot,
+                target,
+                progress);
+
+            DataLocationStore.Write(target);
+            _settingsSummary.SetDataDirectory(target);
+            StatusText.Text = "数据目录已迁移，重启后生效";
+            Log($"数据目录迁移完成：{_installRoot} → {target}（{result.FilesCopied} 个文件，{result.BytesCopied / 1024.0 / 1024.0:F1} MB）");
+
+            MessageBoxResult restart = MessageBox.Show(
+                $"迁移完成：{result.FilesCopied} 个文件，{result.BytesCopied / 1024.0 / 1024.0:F1} MB。\n\n" +
+                "旧目录仍然保留。现在重启启动器以使用新目录吗？",
+                "更改数据目录",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Information);
+            if (restart == MessageBoxResult.Yes)
+            {
+                RestartApplication();
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = "数据目录迁移失败";
+            LogError("更改数据目录失败", ex);
+        }
+    }
+
+    private void RestartApplication()
+    {
+        string? exe = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(exe) || !exe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            MessageBox.Show("请手动关闭并重新打开启动器。", "更改数据目录",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo("cmd.exe", $"/c timeout /t 1 /nobreak >nul & start \"\" \"{exe}\"")
+        {
+            CreateNoWindow = true,
+            UseShellExecute = false,
+        });
+        Application.Current.Shutdown();
+    }
+
     private async void MigrateOldData_Click(object sender, RoutedEventArgs e)
     {
         if (_gameProcess is { } running && !running.HasExited)

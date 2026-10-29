@@ -1,7 +1,7 @@
 namespace Lx.Probe;
 
 // 数据根目录（libraries / assets / versions / logs / accounts.json 所在处）。
-// 顺序：LX_DATA_DIR 环境变量 -> exe 旁边的 portable.txt（data/）-> 开发期仓库 minecraft/ -> %APPDATA%\Lx yulin carp。
+// 顺序：LX_DATA_DIR 环境变量 -> 用户设置的数据目录指针 -> exe 旁边的 portable.txt（data/）-> 开发期仓库 minecraft/ -> %APPDATA%\Lx yulin carp。
 // 所有需要"数据放哪"的代码都走这里，别再各写一份。
 public static class AppPaths
 {
@@ -11,6 +11,13 @@ public static class AppPaths
         if (!string.IsNullOrWhiteSpace(overrideDir))
         {
             return Path.GetFullPath(overrideDir);
+        }
+
+        // 用户在设置里更改过数据目录：指针在固定的 %APPDATA%\Lx yulin carp 下。
+        string? configured = DataLocationStore.Read();
+        if (!string.IsNullOrWhiteSpace(configured) && Directory.Exists(configured))
+        {
+            return EnsureWritableRoot(configured);
         }
 
         string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);

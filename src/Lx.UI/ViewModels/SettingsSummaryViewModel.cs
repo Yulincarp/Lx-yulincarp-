@@ -54,6 +54,8 @@ public sealed class SettingsSummaryViewModel : INotifyPropertyChanged
 
     public void SetCurseForgeKeyStatus(string status) => CurseForgeKeyStatus = status;
 
+    public void SetDataDirectory(string dataRoot) => DataDirectory = $"数据目录：{dataRoot}";
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     private void Set<T>(ref T field, T value, [CallerMemberName] string? name = null)

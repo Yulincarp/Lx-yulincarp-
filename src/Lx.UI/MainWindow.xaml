@@ -317,7 +317,17 @@
                     <Border Grid.Row="1" Background="{DynamicResource PanelBackground}" CornerRadius="6" Padding="16" Margin="0,16,0,0">
                         <StackPanel>
                             <TextBlock x:Name="SettingsSummaryText" FontSize="14" TextWrapping="Wrap" Text="{Binding Summary}"/>
-                            <TextBlock x:Name="DataDirText" Foreground="{DynamicResource TextSecondary}" Margin="0,8,0,0" TextWrapping="Wrap" Text="{Binding DataDirectory}"/>
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="DataDirText" Foreground="{DynamicResource TextSecondary}"
+                                           VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding DataDirectory}"/>
+                                <Button Grid.Column="1" Content="更改数据目录…" Margin="10,0,0,0" Padding="10,3"
+                                        Click="ChangeDataDirectory_Click"
+                                        ToolTip="把当前全部数据复制到新目录，并切换启动器数据位置；旧目录保留"/>
+                            </Grid>
                             <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                                 <Button Content="打开设置…" Padding="14,5" Click="Settings_Click"/>
                                 <Button Content="从旧版导入数据…" Margin="10,0,0,0" Padding="14,5"
