@@ -39,7 +39,16 @@ namespace Lx.Setup
 
             try
             {
-                Installer.Install(target, createShortcuts: false);
+                try
+                {
+                    Installer.Install(target, createShortcuts: false);
+                }
+                catch (UnauthorizedAccessException) when (string.Equals(target, DefaultTarget(), StringComparison.OrdinalIgnoreCase))
+                {
+                    target = FallbackTarget();
+                    Installer.Install(target, createShortcuts: false);
+                }
+
                 File.WriteAllText(Path.Combine(target, "setup-silent.log"), "OK " + DateTime.Now);
             }
             catch (Exception ex)
@@ -57,9 +66,33 @@ namespace Lx.Setup
 
         internal static string DefaultTarget()
         {
-            return Path.Combine(
+            string local = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Programs",
+                "Lx yulin carp");
+            foreach (string candidate in new[] { local, FallbackTarget() })
+            {
+                try
+                {
+                    Directory.CreateDirectory(candidate);
+                    string probe = Path.Combine(candidate, ".write-test");
+                    File.WriteAllText(probe, "ok");
+                    File.Delete(probe);
+                    return candidate;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // 继续尝试用户目录
+                }
+            }
+
+            return local;
+        }
+
+        internal static string FallbackTarget()
+        {
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 "Lx yulin carp");
         }
     }
@@ -188,7 +221,17 @@ namespace Lx.Setup
             try
             {
                 var progress = new Progress<int>(value => _progress.Value = value);
-                await Task.Run(() => Installer.Install(target, _desktopShortcut.Checked, progress));
+                try
+                {
+                    await Task.Run(() => Installer.Install(target, _desktopShortcut.Checked, progress));
+                }
+                catch (UnauthorizedAccessException) when (string.Equals(target, Program.DefaultTarget(), StringComparison.OrdinalIgnoreCase))
+                {
+                    target = Program.FallbackTarget();
+                    _targetBox.Text = target;
+                    await Task.Run(() => Installer.Install(target, _desktopShortcut.Checked, progress));
+                }
+
                 _status.Text = "安装完成";
                 MessageBox.Show(this, "安装完成。\n\n" + target, "Lx yulin carp", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
