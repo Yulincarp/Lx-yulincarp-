@@ -287,7 +287,52 @@ public partial class MainWindow : Window
 
             InstancesList.SelectedItem = uiInstance;
             ApplyInstance(uiInstance);
+
+            if (VersionBox.SelectedItem is not ManifestVersion selectedVersion ||
+                !string.Equals(selectedVersion.Id, uiInstance.VersionId, StringComparison.OrdinalIgnoreCase))
+            {
+                return "未启动：版本列表里没有实例所需的版本";
+            }
+
+            if (AccountBox.SelectedItem is not Account)
+            {
+                return "未启动：实例没有绑定可用账号";
+            }
+
+            // 手机端启动不依赖 Fabric 版本接口：实例本身已经记录了 loaderVersion。
+            // 否则 Launch_Click 会因为下拉框还没加载而直接返回，手机端只看到“已请求”。
+            if (string.Equals(uiInstance.Loader, "fabric", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(uiInstance.LoaderVersion))
+                {
+                    return "未启动：这个 Fabric 实例没有记录 loader 版本";
+                }
+
+                var choices = LoaderVersionBox.ItemsSource as List<LoaderChoice>;
+                if (choices is null)
+                {
+                    choices = new List<LoaderChoice>();
+                    LoaderVersionBox.ItemsSource = choices;
+                }
+
+                LoaderChoice? choice = choices.FirstOrDefault(c =>
+                    string.Equals(c.Version, uiInstance.LoaderVersion, StringComparison.OrdinalIgnoreCase));
+                if (choice is null)
+                {
+                    choice = new LoaderChoice(uiInstance.LoaderVersion, uiInstance.LoaderVersion, true);
+                    choices.Insert(0, choice);
+                }
+
+                LoaderVersionBox.SelectedItem = choice;
+            }
+
+            Log($"手机遥控：请求启动实例 {uiInstance.Name}");
             Launch_Click(this, new RoutedEventArgs());
+            if (_launchCts is null)
+            {
+                return "未开始：桌面端没有进入启动流程，请查看电脑上的日志";
+            }
+
             return $"已请求启动：{instance.Name}";
         }).Task;
 
