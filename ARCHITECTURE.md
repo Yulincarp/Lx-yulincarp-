@@ -5,7 +5,9 @@
 ```text
 src/Lx.Core   业务核心（net8.0 类库，命名空间仍是 Lx.Probe.*）
 src/Lx.Cli    命令行入口（薄入口，引用 Lx.Core）
-src/Lx.UI     WPF 界面（引用 Lx.Core）
+src/Lx.UI     WPF 界面（引用 Lx.Core、Lx.Remote）
+src/Lx.Remote 手机遥控 HTTP 服务（ASP.NET Core Minimal API）
+mobile/Lx.Remote.Android Android WebView 外壳（C1）
 tests/Lx.Tests 单元测试（引用 Lx.Core）
 ```
 
@@ -20,6 +22,24 @@ tests/Lx.Tests 单元测试（引用 Lx.Core）
 - `Lx.Cli` 只做参数解析和调用 Core
 - `Lx.UI` 只做界面、交互、把用户选择交给 Core
 - 新业务逻辑优先放 Core，并补单元测试
+
+## C1 手机遥控
+
+```text
+Windows Lx.UI
+  └─ RemoteWindow
+       └─ Lx.Remote.RemoteControlServer (Kestrel)
+            ├─ /api/ping
+            ├─ /api/snapshot
+            ├─ /api/logs
+            └─ /api/launch
+手机浏览器 / Android WebView APK
+```
+
+- 只绑定局域网，随机 token，不暴露公网
+- 手机端只是遥控，游戏仍在 Windows 上运行
+- APK 是 WebView 外壳，支持 arm64-v8a / armeabi-v7a
+- C2（安卓本地 Java 版）不在本阶段
 
 ## MVVM 进度
 

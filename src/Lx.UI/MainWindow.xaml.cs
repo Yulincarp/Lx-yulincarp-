@@ -19,6 +19,7 @@ using Lx.Probe.Migration;
 using Lx.Probe.Modpacks;
 using Lx.Probe.Mods;
 using Lx.Probe.Resolve;
+using Lx.Probe.Remote;
 using Lx.Probe.Updates;
 using Lx.UI.ViewModels;
 using Microsoft.Win32;
@@ -43,6 +44,7 @@ public partial class MainWindow : Window
     private bool _closing;
     private bool _modrinthBusy;
     private bool _updatingMods;
+    private RemoteControlServer? _remoteServer;
 
     private sealed record LoaderChoice(string Version, string Display, bool Stable = false);
 
@@ -214,6 +216,144 @@ public partial class MainWindow : Window
             InstancesList.SelectedItem = instance;
             ApplyInstance(instance);
         }
+    }
+
+    private void Remote_Click(object sender, RoutedEventArgs e)
+    {
+        if (_remoteServer is { IsRunning: true })
+        {
+            MessageBox.Show("手机遥控窗口已经打开。", "手机遥控", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var server = new RemoteControlServer(
+            new MainWindowRemoteHost(this),
+            AppInfo.ProductName,
+            AppInfo.Version);
+        _remoteServer = server;
+        try
+        {
+            var window = new RemoteWindow(server) { Owner = this };
+            window.Closed += (_, _) =>
+            {
+                if (ReferenceEquals(_remoteServer, server))
+                {
+                    _remoteServer = null;
+                }
+            };
+            window.Show();
+        }
+        catch (Exception ex)
+        {
+            LogError("打开手机遥控失败", ex);
+            _remoteServer = null;
+            MessageBox.Show(this, ex.Message, "手机遥控", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private Task<string> RemoteLaunchAsync(string instanceName) =>
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (_gameProcess is { HasExited: false })
+            {
+                return "游戏已经在运行";
+            }
+
+            if (_launchCts is not null)
+            {
+                return "正在准备启动，请稍候";
+            }
+
+            Instance? instance = InstanceStore.Load(_installRoot)
+                .FirstOrDefault(i => string.Equals(i.Name, instanceName, StringComparison.OrdinalIgnoreCase));
+            if (instance is null)
+            {
+                return $"实例不存在：{instanceName}";
+            }
+
+            Instance? uiInstance = InstancesList.Items.OfType<Instance>()
+                .FirstOrDefault(i => string.Equals(i.Name, instance.Name, StringComparison.OrdinalIgnoreCase));
+            if (uiInstance is null)
+            {
+                RefreshInstances(instance.Name);
+                uiInstance = InstancesList.Items.OfType<Instance>()
+                    .FirstOrDefault(i => string.Equals(i.Name, instance.Name, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (uiInstance is null)
+            {
+                return "实例列表里找不到该实例";
+            }
+
+            InstancesList.SelectedItem = uiInstance;
+            ApplyInstance(uiInstance);
+            Launch_Click(this, new RoutedEventArgs());
+            return $"已请求启动：{instance.Name}";
+        }).Task;
+
+    private sealed class MainWindowRemoteHost : IRemoteHost
+    {
+        private readonly MainWindow _owner;
+
+        public MainWindowRemoteHost(MainWindow owner)
+        {
+            _owner = owner;
+        }
+
+        public RemoteSnapshot Snapshot()
+        {
+            return _owner.Dispatcher.Invoke(() =>
+            {
+                List<RemoteInstanceInfo> instances = InstanceStore.Load(_owner._installRoot)
+                    .Select(i => new RemoteInstanceInfo(i.Name, i.VersionId, i.Loader, i.LoaderVersion, i.AccountName))
+                    .ToList();
+                return new RemoteSnapshot(
+                    _owner.StatusText?.Text ?? string.Empty,
+                    _owner._gameProcess is { HasExited: false },
+                    _owner._launchCts is not null,
+                    instances);
+            });
+        }
+
+        public string GetLogTail(int lines)
+        {
+            try
+            {
+                string logDir = Path.Combine(_owner._installRoot, "logs");
+                if (!Directory.Exists(logDir))
+                {
+                    return string.Empty;
+                }
+
+                string? file = Directory.EnumerateFiles(logDir, "launcher-*.log")
+                    .OrderByDescending(File.GetLastWriteTimeUtc)
+                    .FirstOrDefault();
+                if (file is null)
+                {
+                    return string.Empty;
+                }
+
+                using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var reader = new StreamReader(stream);
+                var tail = new Queue<string>(Math.Max(lines, 1));
+                while (reader.ReadLine() is { } line)
+                {
+                    tail.Enqueue(line);
+                    if (tail.Count > lines)
+                    {
+                        tail.Dequeue();
+                    }
+                }
+
+                return string.Join(Environment.NewLine, tail);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return "日志读取失败：" + ex.Message;
+            }
+        }
+
+        public Task<string> LaunchAsync(string instanceName) => _owner.RemoteLaunchAsync(instanceName);
     }
 
     private void Settings_Click(object sender, RoutedEventArgs e)

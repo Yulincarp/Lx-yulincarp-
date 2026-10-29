@@ -330,6 +330,8 @@
                             </Grid>
                             <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                                 <Button Content="打开设置…" Padding="14,5" Click="Settings_Click"/>
+                                <Button Content="手机遥控…" Margin="10,0,0,0" Padding="14,5" Click="Remote_Click"
+                                        ToolTip="手机和电脑同一局域网时，用手机浏览器遥控启动"/>
                                 <Button Content="从旧版导入数据…" Margin="10,0,0,0" Padding="14,5"
                                         Click="MigrateOldData_Click"
                                         ToolTip="把旧版 minecraft 或 %APPDATA%\Lx 的数据复制到当前数据目录；不覆盖已有文件"/>

@@ -31,6 +31,7 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 dist\Lx-yulin-carp-1.4.0-win-x64\
 dist\Lx-yulin-carp-1.4.0-win-x64.zip
 dist\Lx-yulin-carp-1.4.0-Setup.exe
+dist\Lx-yulin-carp-remote-1.4.0.apk
 dist\update.json
 ```
 
@@ -39,8 +40,17 @@ dist\update.json
 1. 检查 tag（CI 中）与版本号一致
 2. 跑 Release 测试
 3. 调 `publish.ps1` 出自包含单文件版 + zip
-4. 计算 SHA-256
-5. 生成 `update.json`
+4. 构建 Windows Setup.exe
+5. 计算 SHA-256
+6. 生成 `update.json`
+
+手机遥控 APK 单独构建（需要 Android workload + SDK）：
+
+```powershell
+.\build-android.ps1
+```
+
+详见 `REMOTE.md`。
 
 beta 通道：
 

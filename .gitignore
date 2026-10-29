@@ -495,6 +495,15 @@ ui-screenshot.png
 # 发布产物
 dist/
 
+# 本地构建/冒烟测试临时目录
+.buildcheck/
+.publishcheck/
+.publishdata/
+.publishbundle/
+.remotetest/
+.remotewindowtest/
+.androidtools/
+
 
 automodpack/
 config/
@@ -503,3 +512,4 @@ crash-reports/
 saves/
 options.txt
 servers.dat
+.finallocal/

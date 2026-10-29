@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Lx.Core\Lx.Core.csproj" />
+    <ProjectReference Include="..\Lx.Remote\Lx.Remote.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
