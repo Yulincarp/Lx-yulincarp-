@@ -66,11 +66,10 @@ namespace Lx.Setup
 
         internal static string DefaultTarget()
         {
-            string local = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Programs",
-                "Lx yulin carp");
-            foreach (string candidate in new[] { local, FallbackTarget() })
+            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string local = Path.Combine(localAppData, "Programs", "Lx yulin carp");
+            string localDirect = Path.Combine(localAppData, "Lx yulin carp");
+            foreach (string candidate in new[] { local, localDirect, FallbackTarget() })
             {
                 try
                 {
