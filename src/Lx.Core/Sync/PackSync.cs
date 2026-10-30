@@ -65,9 +65,20 @@ public static class PackSync
             {
                 json = await Http.GetStringAsync(target, cancellationToken).ConfigureAwait(false);
             }
+            catch (HttpRequestException ex) when (ex.StatusCode is not null)
+            {
+                string reason = ex.StatusCode == System.Net.HttpStatusCode.NotFound
+                    ? "服务器上没有这个 pack.json（404），检查地址是不是指到了清单文件"
+                    : $"HTTP {(int)ex.StatusCode.Value}";
+                throw new InvalidOperationException($"读取清单失败：{reason}", ex);
+            }
             catch (HttpRequestException ex)
             {
-                throw new InvalidOperationException($"下载 pack.json 失败：{ex.Message}", ex);
+                throw new InvalidOperationException($"读取清单失败：连不上 {target}（{ex.Message}）", ex);
+            }
+            catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new InvalidOperationException("读取清单超时（120 秒），检查网络或换个托管地址", ex);
             }
 
             return PackManifest.Parse(json);
