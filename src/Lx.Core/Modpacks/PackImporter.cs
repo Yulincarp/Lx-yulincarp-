@@ -23,7 +23,7 @@ public static class PackImporter
         using IArchive archive = ArchiveFactory.Open(path);
         List<string> keys = archive.Entries
             .Where(entry => !entry.IsDirectory)
-            .Select(entry => entry.Key.Replace('\\', '/'))
+            .Select(entry => KeyOf(entry).Replace('\\', '/'))
             .ToList();
 
         if (keys.Any(key => key.EndsWith("modrinth.index.json", StringComparison.OrdinalIgnoreCase)))
@@ -122,7 +122,7 @@ public static class PackImporter
             List<IArchiveEntry> entries = archive.Entries.Where(entry => !entry.IsDirectory).ToList();
 
             IArchiveEntry manifestEntry = entries.First(entry =>
-                entry.Key.Replace('\\', '/').EndsWith("manifest.json", StringComparison.OrdinalIgnoreCase));
+                KeyOf(entry).Replace('\\', '/').EndsWith("manifest.json", StringComparison.OrdinalIgnoreCase));
 
             JsonNode manifest = ReadJson(manifestEntry) ?? throw new InvalidOperationException("manifest.json 解析失败");
 
@@ -245,7 +245,7 @@ public static class PackImporter
     {
         using IArchive archive = ArchiveFactory.Open(path);
         List<IArchiveEntry> entries = archive.Entries
-            .Where(entry => !entry.IsDirectory && !IsJunk(entry.Key))
+            .Where(entry => !entry.IsDirectory && !IsJunk(KeyOf(entry)))
             .ToList();
 
         string? commonRoot = FindCommonRoot(entries);
@@ -287,7 +287,7 @@ public static class PackImporter
 
         foreach (IArchiveEntry entry in entries)
         {
-            string key = entry.Key.Replace('\\', '/');
+            string key = KeyOf(entry).Replace('\\', '/');
             if (stripPrefix is not null && key.StartsWith(stripPrefix + "/", StringComparison.OrdinalIgnoreCase))
             {
                 key = key[(stripPrefix.Length + 1)..];
@@ -326,7 +326,7 @@ public static class PackImporter
         var written = new List<string>();
         foreach (IArchiveEntry entry in entries)
         {
-            string full = entry.Key.Replace('\\', '/');
+            string full = KeyOf(entry).Replace('\\', '/');
             if (!full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
@@ -364,12 +364,15 @@ public static class PackImporter
                || key.StartsWith(".git/", StringComparison.OrdinalIgnoreCase);
     }
 
+    // SharpCompress 的 IArchiveEntry.Key 类型可空；没有 key 的条目按空字符串处理，避免调用方 NRE。
+    private static string KeyOf(IArchiveEntry entry) => entry.Key ?? string.Empty;
+
     private static string? FindCommonRoot(List<IArchiveEntry> entries)
     {
         string? root = null;
         foreach (IArchiveEntry entry in entries)
         {
-            string key = entry.Key.Replace('\\', '/');
+            string key = KeyOf(entry).Replace('\\', '/');
             int slash = key.IndexOf('/');
             if (slash <= 0)
             {
