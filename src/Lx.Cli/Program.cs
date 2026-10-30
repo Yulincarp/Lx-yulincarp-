@@ -9,10 +9,13 @@ using Lx.Probe.Migration;
 using Lx.Probe.Modpacks;
 using Lx.Probe.Mods;
 using Lx.Probe.Resolve;
+using Lx.Probe.Sync;
 
 // 参数：--list / --version <id> / --root <dir> / --game-dir <dir> / --loader fabric
 //       --auth offline|yggdrasil|microsoft / --name / --api / --email / --client-id
 //       --accounts / --account <名字> / --mods list|enable|disable|add|remove
+//       --pack-export --out <dir> / --pack-sync <url|dir> [--pack-dry-run]
+//       --pack-rollback [--snapshot <id>] / --snapshots / --server <host[:port]>
 string? rootArg = null;
 string? versionArg = null;
 string? authArg = null;
@@ -39,6 +42,16 @@ bool listAccounts = false;
 bool debug = false;
 bool relogin = false;
 bool migrateOverwrite = false;
+string? packOutArg = null;
+string? packVersionArg = null;
+string? packNameArg = null;
+string? packSyncArg = null;
+string? snapshotArg = null;
+string? serverArg = null;
+bool packExportFlag = false;
+bool packRollbackFlag = false;
+bool packDryRunFlag = false;
+bool listSnapshotsFlag = false;
 
 for (int i = 0; i < args.Length; i++)
 {
@@ -146,6 +159,46 @@ for (int i = 0; i < args.Length; i++)
     else if (arg == "--account" && i + 1 < args.Length)
     {
         accountArg = args[++i];
+    }
+    else if (arg == "--pack-export")
+    {
+        packExportFlag = true;
+    }
+    else if (arg == "--pack-sync" && i + 1 < args.Length)
+    {
+        packSyncArg = args[++i];
+    }
+    else if (arg == "--pack-rollback")
+    {
+        packRollbackFlag = true;
+    }
+    else if (arg == "--pack-dry-run")
+    {
+        packDryRunFlag = true;
+    }
+    else if (arg == "--snapshots")
+    {
+        listSnapshotsFlag = true;
+    }
+    else if (arg == "--snapshot" && i + 1 < args.Length)
+    {
+        snapshotArg = args[++i];
+    }
+    else if (arg == "--out" && i + 1 < args.Length)
+    {
+        packOutArg = args[++i];
+    }
+    else if (arg == "--pack-version" && i + 1 < args.Length)
+    {
+        packVersionArg = args[++i];
+    }
+    else if (arg == "--pack-name" && i + 1 < args.Length)
+    {
+        packNameArg = args[++i];
+    }
+    else if (arg == "--server" && i + 1 < args.Length)
+    {
+        serverArg = args[++i];
     }
     else if (!arg.StartsWith("--", StringComparison.Ordinal))
     {
@@ -310,6 +363,151 @@ if (listAccounts)
     return 0;
 }
 
+Instance? FindInstanceForDir(string dir)
+{
+    string name = Path.GetFileName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(dir)));
+    return InstanceStore.Load(installRoot).FirstOrDefault(instance => string.Equals(instance.Name, name, StringComparison.OrdinalIgnoreCase));
+}
+
+if (listSnapshotsFlag)
+{
+    if (gameDirArg is null)
+    {
+        Console.WriteLine("[错误] --snapshots 需要 --game-dir <实例目录>");
+        return 1;
+    }
+
+    var snapshots = SyncSnapshotStore.List(Path.GetFullPath(gameDirArg));
+    if (snapshots.Count == 0)
+    {
+        Console.WriteLine("这个实例还没有同步快照");
+        return 0;
+    }
+
+    foreach (SyncSnapshot snapshot in snapshots)
+    {
+        Console.WriteLine($"{snapshot.Id}  {snapshot.Display}  {snapshot.PreviousManifest?.PackVersion ?? "-"}");
+    }
+
+    return 0;
+}
+
+if (packRollbackFlag)
+{
+    if (gameDirArg is null)
+    {
+        Console.WriteLine("[错误] --pack-rollback 需要 --game-dir <实例目录>");
+        return 1;
+    }
+
+    try
+    {
+        RollbackResult rollback = SyncSnapshotStore.RollbackWithReport(gameDirArg, snapshotArg, Console.WriteLine);
+        Console.WriteLine($"回滚完成：{rollback.Restored} 个文件恢复到同步前，校验不一致 {rollback.Mismatches}");
+        return rollback.Mismatches == 0 ? 0 : 2;
+    }
+    catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+    {
+        Console.WriteLine($"[错误] {ex.Message}");
+        return 1;
+    }
+}
+
+if (packExportFlag)
+{
+    if (gameDirArg is null || packOutArg is null)
+    {
+        Console.WriteLine("[错误] --pack-export 需要 --game-dir <实例目录> 和 --out <导出目录>");
+        return 1;
+    }
+
+    try
+    {
+        Instance? instance = FindInstanceForDir(gameDirArg);
+        var exportOptions = new PackExportOptions(
+            PackName: packNameArg ?? instance?.Name,
+            PackVersion: packVersionArg ?? DateTime.Now.ToString("yyyy.MM.dd"),
+            MinecraftVersion: versionArg ?? instance?.VersionId,
+            Loader: loaderArg ?? instance?.Loader,
+            LoaderVersion: loaderVersionArg ?? instance?.LoaderVersion,
+            Server: serverArg is null ? null : PackServerInfo.Parse(serverArg));
+
+        PackExportResult exportResult = PackExporter.Export(gameDirArg, packOutArg, exportOptions, Console.WriteLine);
+        Console.WriteLine($"导出 {exportResult.FileCount} 个文件，{exportResult.TotalBytes / 1024.0 / 1024.0:F1} MB");
+        Console.WriteLine($"把整个 {Path.GetFullPath(packOutArg)} 传到静态托管，客户端填：<基地址>/pack.json");
+        return 0;
+    }
+    catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+    {
+        Console.WriteLine($"[错误] {ex.Message}");
+        return 1;
+    }
+}
+
+if (packSyncArg is not null)
+{
+    if (gameDirArg is null)
+    {
+        Console.WriteLine("[错误] --pack-sync 需要 --game-dir <实例目录>");
+        return 1;
+    }
+
+    try
+    {
+        PackManifest remote = await PackSync.LoadRemoteAsync(packSyncArg);
+        PackSyncPlan plan = PackSync.Plan(gameDirArg, remote, PackSync.ResolveBaseUrl(packSyncArg));
+        Console.WriteLine($"清单 {remote.PackName} {remote.PackVersion}（{remote.AllPaths.Count()} 个文件）");
+        Console.WriteLine($"计划：下载 {plan.Download.Count}，删除 {plan.Delete.Count}，已对齐 {plan.Unchanged}");
+
+        if (packDryRunFlag)
+        {
+            foreach (PackFileEntry entry in plan.Download.Take(50))
+            {
+                Console.WriteLine($"  下载 {entry.Path}");
+            }
+
+            foreach (string path in plan.Delete.Take(50))
+            {
+                Console.WriteLine($"  删除 {path}");
+            }
+
+            return 0;
+        }
+
+        PackSyncResult syncResult = await PackSync.SyncAsync(
+            gameDirArg,
+            packSyncArg,
+            progress => Console.WriteLine($"  [{progress.Phase}] {progress.Message}"));
+
+        Console.WriteLine(syncResult.Summary);
+        if (!syncResult.Success)
+        {
+            return 2;
+        }
+
+        Instance? instance = FindInstanceForDir(gameDirArg);
+        if (instance is not null)
+        {
+            InstanceStore.AddOrUpdate(installRoot, instance with
+            {
+                PackUrl = packSyncArg,
+                VersionId = syncResult.Manifest.MinecraftVersion ?? instance.VersionId,
+                Loader = syncResult.Manifest.Loader ?? instance.Loader,
+                LoaderVersion = syncResult.Manifest.LoaderVersion ?? instance.LoaderVersion,
+                ServerAddress = syncResult.Manifest.Server?.Address ?? instance.ServerAddress,
+                ServerPort = syncResult.Manifest.Server?.Port ?? instance.ServerPort,
+            });
+        }
+
+        return 0;
+    }
+    catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or HttpRequestException)
+    {
+        Console.WriteLine($"[错误] {ex.Message}");
+        return 1;
+    }
+}
+
 if (listOnly)
 {
     LaunchSettings listSettings = SettingsStore.Load(installRoot);
@@ -434,7 +632,8 @@ else
 AccountStore.Save(installRoot, account);
 Console.WriteLine($"账号：{account.Type} {account.Name} {account.Uuid}");
 
-var options = new LaunchOptions(installRoot, versionId, loaderArg, loaderVersionArg, gameDirArg, account);
+IReadOnlyList<string>? extraGameArgs = serverArg is null ? null : PackServerInfo.Parse(serverArg).ToGameArgs();
+var options = new LaunchOptions(installRoot, versionId, loaderArg, loaderVersionArg, gameDirArg, account, extraGameArgs);
 
 LaunchResult result;
 try

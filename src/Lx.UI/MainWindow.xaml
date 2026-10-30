@@ -150,6 +150,7 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <StackPanel Grid.Row="0">
@@ -171,6 +172,36 @@
                             </StackPanel>
                             <ListBox x:Name="InstancesList" SelectionChanged="Instances_SelectionChanged" DisplayMemberPath="Name"/>
                         </DockPanel>
+                    </GroupBox>
+
+                    <GroupBox Grid.Row="2" Header="服务器同步" Margin="0,12,0,0">
+                        <StackPanel>
+                            <DockPanel Margin="0,0,0,8">
+                                <TextBlock Text="同步地址" VerticalAlignment="Center" Margin="0,0,8,0"
+                                           Foreground="{DynamicResource TextSecondary}"/>
+                                <TextBox x:Name="PackSyncUrlBox" Height="28"
+                                         ToolTip="http(s)://…/pack.json，或本地目录 / zip 解出来的托管目录"/>
+                            </DockPanel>
+                            <WrapPanel Margin="0,0,0,8">
+                                <Button Content="导出包" Click="ExportPack_Click" Padding="14,4" Margin="0,0,8,0"
+                                        ToolTip="把当前实例的 mods / config 导出成可托管的目录（含 pack.json 清单）"/>
+                                <Button x:Name="SyncPackButton" Content="同步" Click="SyncPack_Click" Padding="14,4" Margin="0,0,8,0"
+                                        ToolTip="只下载有差异的文件，删掉服主已移除的文件"/>
+                                <Button Content="回滚" Click="RollbackPack_Click" Padding="14,4" Margin="0,0,8,0"
+                                        ToolTip="恢复到上一次同步前的状态"/>
+                                <Button Content="快照" Click="ShowSnapshots_Click" Padding="14,4"/>
+                            </WrapPanel>
+                            <DockPanel>
+                                <TextBlock Text="服务器" VerticalAlignment="Center" Margin="0,0,8,0"
+                                           Foreground="{DynamicResource TextSecondary}"/>
+                                <Button Content="进服" Click="JoinServer_Click" Padding="14,4" DockPanel.Dock="Right" Margin="8,0,0,0"
+                                        ToolTip="带上 --server / --port 启动，直接连进服务器"/>
+                                <TextBox x:Name="ServerAddressBox" Height="28" ToolTip="mc.example.com 或 mc.example.com:25566"/>
+                            </DockPanel>
+                            <TextBlock x:Name="SyncStatusText" Foreground="{DynamicResource TextSecondary}" FontSize="11"
+                                       Margin="0,8,0,0" TextWrapping="Wrap"
+                                       Text="导出：生成可上传的目录；同步：按 pack.json 只传差异并保留快照；进服：同步后直接连服务器。"/>
+                        </StackPanel>
                     </GroupBox>
                 </Grid>
 

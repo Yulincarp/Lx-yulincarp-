@@ -9,7 +9,10 @@ public sealed record Instance(
     string VersionId,
     string? Loader,
     string? AccountName,
-    string? LoaderVersion = null);
+    string? LoaderVersion = null,
+    string? PackUrl = null,
+    string? ServerAddress = null,
+    int? ServerPort = null);
 
 public static class InstanceStore
 {

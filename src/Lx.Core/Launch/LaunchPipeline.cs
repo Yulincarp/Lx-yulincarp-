@@ -7,13 +7,15 @@ using Lx.Probe.Resolve;
 namespace Lx.Probe.Launch;
 
 // 一次启动需要的全部输入。
+// ExtraGameArgs 给"一键进服"用：追加 --server / --port 之类，不参与版本规则判断。
 public sealed record LaunchOptions(
     string InstallRoot,
     string VersionId,
     string? Loader,
     string? LoaderVersion,
     string? GameDir,
-    Account Account);
+    Account Account,
+    IReadOnlyList<string>? ExtraGameArgs = null);
 
 // 一次启动的产物：命令行 + 关键统计，界面和命令行都用它。
 public sealed record LaunchProgress(string Stage, int Done, int Total);
@@ -310,6 +312,22 @@ public static class LaunchPipeline
             gameArgs.Add("--fullscreen");
         }
 
+        if (options.ExtraGameArgs is { Count: > 0 } extraArgs)
+        {
+            // 同一参数以额外值为准：先摘掉旧值，再追加（--server 重复会让客户端只认第一个）。
+            foreach (string extra in extraArgs)
+            {
+                string key = extra.Split('=', 2)[0];
+                if (key is "--server" or "--port" or "--quickPlayMultiplayer")
+                {
+                    RemoveOption(gameArgs, key);
+                }
+            }
+
+            gameArgs.AddRange(extraArgs);
+            log($"启动参数追加：{string.Join(' ', extraArgs)}");
+        }
+
         if (settings.MaxMemoryMb > 0 && !jvmArgs.Any(arg => arg.StartsWith("-Xmx", StringComparison.OrdinalIgnoreCase)))
         {
             jvmArgs.Insert(0, $"-Xmx{settings.MaxMemoryMb}M");
@@ -336,6 +354,21 @@ public static class LaunchPipeline
         string commandLine = CommandLineBuilder.Build(javaExe, jvmArgs, version.MainClass ?? string.Empty, gameArgs);
 
         return new LaunchResult(versionId, gameRoot, commandLine, manifestItems.Count, assets.Count, javaExe);
+    }
+
+    // 去掉带值的启动参数（"--server 1.2.3.4" 或 "--server=1.2.3.4"）。
+    private static void RemoveOption(List<string> args, string key)
+    {
+        for (int i = args.Count - 2; i >= 0; i--)
+        {
+            if (string.Equals(args[i], key, StringComparison.OrdinalIgnoreCase))
+            {
+                args.RemoveAt(i + 1);
+                args.RemoveAt(i);
+            }
+        }
+
+        args.RemoveAll(arg => arg.StartsWith(key + "=", StringComparison.OrdinalIgnoreCase));
     }
 
     // 简单 Windows 命令行拆分：支持双引号包住带空格的参数，足够处理 JVM 参数。

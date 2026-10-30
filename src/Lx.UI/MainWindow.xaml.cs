@@ -20,6 +20,7 @@ using Lx.Probe.Modpacks;
 using Lx.Probe.Mods;
 using Lx.Probe.Resolve;
 using Lx.Probe.Remote;
+using Lx.Probe.Sync;
 using Lx.Probe.Updates;
 using Lx.UI.ViewModels;
 using Microsoft.Win32;
@@ -44,6 +45,8 @@ public partial class MainWindow : Window
     private bool _closing;
     private bool _modrinthBusy;
     private bool _updatingMods;
+    private bool _syncBusy;
+    private IReadOnlyList<string>? _pendingServerArgs;
     private RemoteControlServer? _remoteServer;
 
     private sealed record LoaderChoice(string Version, string Display, bool Stable = false);
@@ -751,6 +754,13 @@ public partial class MainWindow : Window
         }
 
         UpdatePackButton.IsEnabled = PackRecord.Load(InstanceStore.DirFor(_installRoot, instance.Name)) is not null;
+        PackSyncUrlBox.Text = instance.PackUrl ?? string.Empty;
+        ServerAddressBox.Text = instance.ServerAddress is { Length: > 0 } address
+            ? new PackServerInfo(address, instance.ServerPort ?? 25565).Display
+            : string.Empty;
+        SyncStatusText.Text = instance.PackUrl is { Length: > 0 }
+            ? $"已绑定同步地址；点「同步」拉取最新版本，点「进服」直接连服务器。"
+            : "导出：生成可上传的目录；同步：按 pack.json 只传差异并保留快照；进服：同步后直接连服务器。";
         StatusText.Text = $"实例：{instance.Name}";
         RefreshMods();
     }
@@ -876,6 +886,272 @@ public partial class MainWindow : Window
         catch (Exception ex) when (ex is InvalidOperationException or IOException)
         {
             LogError("更新整合包失败", ex);
+        }
+    }
+
+    // 把当前实例的 mods / config 导出成静态托管目录（pack.json + 文件本体）。
+    private async void ExportPack_Click(object sender, RoutedEventArgs e)
+    {
+        if (InstancesList.SelectedItem is not Instance instance)
+        {
+            Log("先选中一个实例");
+            return;
+        }
+
+        var dialog = new OpenFolderDialog
+        {
+            Title = "选择导出到哪里（会在里面新建一个整合包目录）",
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        string instanceDir = InstanceStore.DirFor(_installRoot, instance.Name);
+        string output = Path.Combine(dialog.FolderName, $"{instance.Name}-pack");
+
+        try
+        {
+            SyncStatusText.Text = "正在导出…（要算一遍 sha1，大包会慢一会儿）";
+            var exportOptions = new PackExportOptions(
+                PackName: instance.Name,
+                PackVersion: DateTime.Now.ToString("yyyy.MM.dd"),
+                MinecraftVersion: instance.VersionId,
+                Loader: instance.Loader,
+                LoaderVersion: instance.LoaderVersion,
+                Server: TryParseServer(ServerAddressBox.Text));
+
+            // 算哈希/复制文件都是 IO，别放在 UI 线程上。
+            PackExportResult result = await Task.Run(() => PackExporter.Export(
+                instanceDir,
+                output,
+                exportOptions,
+                message => Dispatcher.Invoke(() => Log(message))));
+
+            SyncStatusText.Text = $"已导出 {result.FileCount} 个文件（{result.TotalBytes / 1024.0 / 1024.0:F1} MB）→ {output}";
+            PackSyncUrlBox.Text = result.ManifestPath;
+            Log($"把整个目录传到静态托管（Nginx / 对象存储 / GitHub Pages），客户端填 <基地址>/pack.json");
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            LogError("导出整合包失败", ex);
+            SyncStatusText.Text = "导出失败，详情见日志";
+        }
+    }
+
+    private async void SyncPack_Click(object sender, RoutedEventArgs e)
+    {
+        if (_syncBusy)
+        {
+            Log("正在同步，等它完成");
+            return;
+        }
+
+        if (InstancesList.SelectedItem is not Instance instance)
+        {
+            Log("先选中一个实例");
+            return;
+        }
+
+        string location = PackSyncUrlBox.Text.Trim();
+        if (location.Length == 0)
+        {
+            Log("先填同步地址：http(s)://…/pack.json，或本地托管目录");
+            return;
+        }
+
+        string dir = InstanceStore.DirFor(_installRoot, instance.Name);
+        _syncBusy = true;
+        SyncPackButton.IsEnabled = false;
+        try
+        {
+            PackSyncResult result = await Task.Run(() => PackSync.SyncAsync(
+                dir,
+                location,
+                progress => Dispatcher.Invoke(() =>
+                    SyncStatusText.Text = $"{progress.Phase}：{progress.Message}")));
+
+            Log(result.Summary);
+            foreach (DownloadFailure failure in result.Failures.Take(10))
+            {
+                Log($"[失败] {failure.RelativePath}：{failure.Reason}");
+            }
+
+            if (!result.Success)
+            {
+                SyncStatusText.Text = $"同步失败：{result.Failed} 个文件没下全；已保留同步前快照";
+                MessageBoxResult choice = MessageBox.Show(
+                    this,
+                    $"同步未完成：{result.Failed} 个文件下载失败。\n现在回滚到同步前吗？（也可以稍后点「回滚」）",
+                    "同步失败",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+
+                if (choice == MessageBoxResult.Yes)
+                {
+                    RollbackResult rollback = SyncSnapshotStore.RollbackWithReport(
+                        dir, result.SnapshotId, message => Dispatcher.Invoke(() => Log(message)));
+                    SyncStatusText.Text = $"已回滚：恢复/删除 {rollback.Restored} 个文件，校验不一致 {rollback.Mismatches}";
+                    RefreshMods();
+                }
+
+                return;
+            }
+
+            if (result.Manifest.Server is { } server)
+            {
+                ServerAddressBox.Text = server.Display;
+            }
+
+            InstanceStore.AddOrUpdate(_installRoot, instance with
+            {
+                PackUrl = location,
+                VersionId = result.Manifest.MinecraftVersion ?? instance.VersionId,
+                Loader = result.Manifest.Loader ?? instance.Loader,
+                LoaderVersion = result.Manifest.LoaderVersion ?? instance.LoaderVersion,
+                ServerAddress = result.Manifest.Server?.Address ?? instance.ServerAddress,
+                ServerPort = result.Manifest.Server?.Port ?? instance.ServerPort,
+            });
+
+            SyncStatusText.Text = $"已同步到 {result.Manifest.PackVersion}：下载 {result.Downloaded}，删除 {result.Deleted}，已是最新 {result.Plan.Unchanged}";
+            RefreshMods();
+        }
+        catch (OperationCanceledException)
+        {
+            SyncStatusText.Text = "同步已取消";
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or HttpRequestException)
+        {
+            LogError("同步整合包失败", ex);
+            SyncStatusText.Text = "同步失败，详情见日志";
+        }
+        finally
+        {
+            _syncBusy = false;
+            SyncPackButton.IsEnabled = true;
+        }
+    }
+
+    private void RollbackPack_Click(object sender, RoutedEventArgs e)
+    {
+        if (InstancesList.SelectedItem is not Instance instance)
+        {
+            Log("先选中一个实例");
+            return;
+        }
+
+        string dir = InstanceStore.DirFor(_installRoot, instance.Name);
+        SyncSnapshot? latest = SyncSnapshotStore.Latest(dir);
+        if (latest is null)
+        {
+            Log("这个实例还没有同步快照，没有可回滚的状态");
+            return;
+        }
+
+        MessageBoxResult confirm = MessageBox.Show(
+            this,
+            $"恢复到 {latest.Display} 的同步前状态？\n同步之后手动改过的文件会被覆盖。",
+            "回滚整合包",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning);
+
+        if (confirm != MessageBoxResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            RollbackResult rollback = SyncSnapshotStore.RollbackWithReport(dir, latest.Id, message => Dispatcher.Invoke(() => Log(message)));
+            SyncStatusText.Text = $"已回滚到 {latest.Id}：恢复/删除 {rollback.Restored} 个文件，校验不一致 {rollback.Mismatches}";
+            RefreshMods();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            LogError("回滚失败", ex);
+        }
+    }
+
+    private void ShowSnapshots_Click(object sender, RoutedEventArgs e)
+    {
+        if (InstancesList.SelectedItem is not Instance instance)
+        {
+            Log("先选中一个实例");
+            return;
+        }
+
+        IReadOnlyList<SyncSnapshot> snapshots = SyncSnapshotStore.List(InstanceStore.DirFor(_installRoot, instance.Name));
+        if (snapshots.Count == 0)
+        {
+            Log("这个实例还没有同步快照");
+            return;
+        }
+
+        string text = string.Join(Environment.NewLine, snapshots.Select(
+            snapshot => $"{snapshot.Id}  {snapshot.Display}  清单 {snapshot.PreviousManifest?.PackVersion ?? "-"}"));
+        MessageBox.Show(this, text, $"同步快照（{snapshots.Count}）", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    // 一键进服：把服务器地址写进实例，再把 --server / --port 交给启动流程。
+    private void JoinServer_Click(object sender, RoutedEventArgs e)
+    {
+        if (InstancesList.SelectedItem is not Instance instance)
+        {
+            Log("先选中一个实例");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(ServerAddressBox.Text))
+        {
+            // 没手填就看 pack.json 里带的服务器（同步后通常已经有了）
+            PackServerInfo? fromPack = PackManifest.LoadForInstance(_installRoot, instance)?.Server;
+            if (fromPack is null)
+            {
+                Log("先填服务器地址（pack.json 里带了 server 的话，同步后会自动填）");
+                return;
+            }
+
+            ServerAddressBox.Text = fromPack.Display;
+        }
+
+        PackServerInfo server;
+        try
+        {
+            server = PackServerInfo.Parse(ServerAddressBox.Text);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Log($"[错误] {ex.Message}");
+            return;
+        }
+
+        InstanceStore.AddOrUpdate(_installRoot, instance with
+        {
+            ServerAddress = server.Address,
+            ServerPort = server.Port,
+        });
+
+        ServerAddressBox.Text = server.Display;
+        _pendingServerArgs = server.ToGameArgs();
+        Log($"进服：{server.Display}");
+        Launch_Click(this, new RoutedEventArgs());
+    }
+
+    private static PackServerInfo? TryParseServer(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        try
+        {
+            return PackServerInfo.Parse(text);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
         }
     }
 
@@ -1837,13 +2113,17 @@ public partial class MainWindow : Window
                 });
             }
 
+            IReadOnlyList<string>? extraGameArgs = _pendingServerArgs;
+            _pendingServerArgs = null;
+
             var options = new LaunchOptions(
                 _installRoot,
                 version.Id,
                 loader,
                 loaderVersion,
                 gameDir,
-                account);
+                account,
+                extraGameArgs);
 
             var progress = new Progress<LaunchProgress>(p =>
             {
