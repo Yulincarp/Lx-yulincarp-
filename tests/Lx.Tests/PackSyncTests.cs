@@ -318,6 +318,35 @@ public class PackSyncTests
     }
 
     [Fact]
+    public void Snapshot_TwoInSameSecond_GetDistinctIds_AndRollbackByReturnedId()
+    {
+        string dir = TempDir("snap2");
+        try
+        {
+            Write(dir, "mods/a.jar", "v1");
+
+            SyncSnapshot first = SyncSnapshotStore.Create(dir, new[] { "mods/a.jar" }, null);
+            Write(dir, "mods/a.jar", "v2");
+            SyncSnapshot second = SyncSnapshotStore.Create(dir, new[] { "mods/a.jar" }, null);
+
+            Assert.NotEqual(first.Id, second.Id);
+            Assert.Equal(second.Id, Path.GetFileName(second.Directory));
+
+            // 按 sync 返回的 id 回滚，必须回到第二次创建时（v2），不是第一次（v1）
+            Write(dir, "mods/a.jar", "v3");
+            SyncSnapshotStore.Rollback(dir, second.Id);
+            Assert.Equal("v2", Read(dir, "mods/a.jar"));
+
+            SyncSnapshotStore.Rollback(dir, first.Id);
+            Assert.Equal("v1", Read(dir, "mods/a.jar"));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void ServerInfo_ParsesForms_AndBuildsGameArgs()
     {
         Assert.Equal(new PackServerInfo("mc.example.com"), PackServerInfo.Parse("mc.example.com"));

@@ -49,12 +49,16 @@ public static class SyncSnapshotStore
         CancellationToken cancellationToken = default)
     {
         string root = Path.GetFullPath(instanceDir);
-        string id = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        string baseId = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+        string id = baseId;
         string dir = DirFor(root, id);
         int suffix = 1;
+
+        // 同一秒内同步两次（测试/小包很常见）不能让两个快照同名，否则按 id 回滚会拿到先那个。
         while (Directory.Exists(dir))
         {
-            dir = DirFor(root, $"{id}-{suffix++}");
+            id = $"{baseId}-{suffix++}";
+            dir = DirFor(root, id);
         }
 
         Directory.CreateDirectory(Path.Combine(dir, "files"));
@@ -195,7 +199,12 @@ public static class SyncSnapshotStore
     {
         if (!string.IsNullOrWhiteSpace(snapshotId))
         {
-            SyncSnapshot? exact = TryLoad(DirFor(instanceDir, snapshotId));
+            // 老版本同一秒内的两个快照可能同名，按目录找不到时再按记录里的 Id 兜底。
+            SyncSnapshot? exact = TryLoad(DirFor(instanceDir, snapshotId)) ??
+                                  List(instanceDir)
+                                      .Where(snapshot => string.Equals(snapshot.Id, snapshotId, StringComparison.OrdinalIgnoreCase))
+                                      .OrderByDescending(snapshot => snapshot.CreatedAt)
+                                      .FirstOrDefault();
             if (exact is null)
             {
                 throw new InvalidOperationException($"找不到快照：{snapshotId}");
