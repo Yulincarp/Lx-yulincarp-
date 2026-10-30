@@ -16,20 +16,20 @@
 
 ## 下载
 
-到 [Releases](https://github.com/Yulincarp/Lx-yulincarp-/releases/latest) 页面下载（当前最新为 **v1.4.1**）：
+到 [Releases](https://github.com/Yulincarp/Lx-yulincarp-/releases/latest) 页面下载（当前最新为 **v1.4.2**）：
 
 | 文件 | 说明 |
 |---|---|
-| `Lx-yulin-carp-1.4.1-Setup.exe` | Windows 安装程序（64 位），约 74 MB，推荐 |
-| `Lx-yulin-carp-1.4.1-win-x64.zip` | 免安装压缩包，解压后运行 `Lx yulin carp.exe` |
-| `Lx-yulin-carp-remote-1.4.1.apk` | 手机遥控 APK，装在手机上连电脑上的启动器 |
+| `Lx-yulin-carp-1.4.2-Setup.exe` | Windows 安装程序（64 位），约 73.97 MB，推荐 |
+| `Lx-yulin-carp-1.4.2-win-x64.zip` | 免安装压缩包，解压后运行 `Lx yulin carp.exe` |
+| `Lx-yulin-carp-remote-1.4.2.apk` | 手机遥控 APK，装在手机上连电脑上的启动器 |
 | `update.json` | 自动更新清单，放进启动器数据目录即可启用「检查更新」 |
 
 > 仓库根目录不再存放安装包，请统一从 Releases 下载。
 
 ## 安装
 
-1. 下载 `Lx-yulin-carp-1.4.1-Setup.exe`
+1. 下载 `Lx-yulin-carp-1.4.2-Setup.exe`
 2. 双击运行，按提示完成安装
 3. 如出现"Windows 已保护你的电脑"，点 **更多信息** → **仍要运行**
 4. 启动器首次运行会自动准备所需组件
@@ -46,6 +46,10 @@
 
 ## 版本记录
 
+### v1.4.2
+- 自更新默认查 GitHub Release 的 latest/update.json，装过这版就能自动发现新版本
+- 仍可用 LX_UPDATE_URL 或数据目录里的 update.json 覆盖
+
 ### v1.4.1
 - 默认数据目录改为 `%APPDATA%\Lx yulin carp\.minecraft`
 - 「迁移旧数据」能识别 1.4.0 及更早的默认目录，老数据不会丢
@@ -61,7 +65,7 @@
 A：启动器会自动下载对应版本所需的 Java 运行环境，保持网络畅通即可。
 
 **Q：杀毒软件报毒？**
-A：安装包未做数字签名，部分杀软会误报。可加入信任列表，或核对文件大小是否为 73.95 MB。
+A：安装包未做数字签名，部分杀软会误报。可加入信任列表，或核对文件大小是否为 73.97 MB。
 
 **Q：支持正版登录吗？**
 A：见启动器内账号设置。
