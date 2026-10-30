@@ -107,7 +107,7 @@ signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 ^
 
 - [ ] `dotnet test` 全绿
 - [ ] 干净 Windows 解压 zip 能启动
-- [ ] 首次启动数据目录正确（`%APPDATA%\Lx yulin carp` 或 portable `data`）
+- [ ] 首次启动数据目录正确（`%APPDATA%\Lx yulin carp\.minecraft` 或 portable `data`）
 - [ ] 自更新 0.3.x → 1.4.0 成功、失败能回滚
 - [ ] 实例/账号/设置不丢
 - [ ] `update.json` 的 sha256 与 zip 一致
