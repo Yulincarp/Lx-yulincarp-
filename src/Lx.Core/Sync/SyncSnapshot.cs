@@ -33,6 +33,7 @@ public static class SyncSnapshotStore
         PropertyNameCaseInsensitive = true,
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
     public static string RootFor(string instanceDir) => Path.Combine(instanceDir, FolderName);

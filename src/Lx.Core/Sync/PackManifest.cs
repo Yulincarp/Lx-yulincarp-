@@ -192,6 +192,8 @@ public sealed record PackManifest
         PropertyNameCaseInsensitive = true,
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        // pack.json 是给服主看/手改的，中文路径别写成 \uXXXX。
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
     public string ToJson() => JsonSerializer.Serialize(Normalize(), Options);
@@ -300,6 +302,17 @@ public sealed record PackManifest
         filled.Save(PathFor(instanceDir));
         return filled;
     }
+
+    // 回滚后把实例记录对齐到恢复出来的 pack.json：
+    // 服务器以清单为准（清单没有 server 就清空，避免回滚后还连着新地址），版本/加载器只在清单有值时覆盖。
+    public Instance ToInstanceBinding(Instance current) => current with
+    {
+        VersionId = MinecraftVersion ?? current.VersionId,
+        Loader = Loader ?? current.Loader,
+        LoaderVersion = LoaderVersion ?? current.LoaderVersion,
+        ServerAddress = Server?.Address,
+        ServerPort = Server?.Port,
+    };
 
     // 记到 instances.json 上的同步来源，方便下次"再点一次同步"。
     public static PackManifest? LoadForInstance(string installRoot, Instance instance)

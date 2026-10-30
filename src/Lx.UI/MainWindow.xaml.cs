@@ -992,6 +992,7 @@ public partial class MainWindow : Window
                 {
                     RollbackResult rollback = SyncSnapshotStore.RollbackWithReport(
                         dir, result.SnapshotId, message => Dispatcher.Invoke(() => Log(message)));
+                    RestoreInstanceBinding(dir, instance);
                     SyncStatusText.Text = $"已回滚：恢复/删除 {rollback.Restored} 个文件，校验不一致 {rollback.Mismatches}";
                     RefreshMods();
                 }
@@ -1064,6 +1065,7 @@ public partial class MainWindow : Window
         try
         {
             RollbackResult rollback = SyncSnapshotStore.RollbackWithReport(dir, latest.Id, message => Dispatcher.Invoke(() => Log(message)));
+            RestoreInstanceBinding(dir, instance);
             SyncStatusText.Text = $"已回滚到 {latest.Id}：恢复/删除 {rollback.Restored} 个文件，校验不一致 {rollback.Mismatches}";
             RefreshMods();
         }
@@ -1071,6 +1073,16 @@ public partial class MainWindow : Window
         {
             LogError("回滚失败", ex);
         }
+    }
+
+    // 回滚的是文件，实例记录也要跟着回到旧清单（尤其是服务器地址，不然"进服"会连到新地址）。
+    private void RestoreInstanceBinding(string instanceDir, Instance instance)
+    {
+        Instance updated = PackSync.BindingAfterRollback(instanceDir, instance);
+        InstanceStore.AddOrUpdate(_installRoot, updated);
+        ServerAddressBox.Text = updated.ServerAddress is { Length: > 0 } address
+            ? new PackServerInfo(address, updated.ServerPort ?? 25565).Display
+            : string.Empty;
     }
 
     private void ShowSnapshots_Click(object sender, RoutedEventArgs e)

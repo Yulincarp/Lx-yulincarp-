@@ -1,4 +1,5 @@
 using System.Net.Http;
+using Lx.Probe.Instances;
 using Lx.Probe.Net;
 using Lx.Probe.Resolve;
 
@@ -321,6 +322,16 @@ public static class PackSync
     // 回滚到上一次（或指定）同步快照。
     public static int Rollback(string instanceDir, string? snapshotId = null, Action<string>? log = null) =>
         SyncSnapshotStore.Rollback(instanceDir, snapshotId, log);
+
+    // 回滚后实例记录该长什么样：以恢复出来的 pack.json 为准；
+    // 如果回滚把 pack.json 也删了（同步前本来就没有），说明这个实例不再由包管理，绑定一并清掉。
+    public static Instance BindingAfterRollback(string instanceDir, Instance current)
+    {
+        PackManifest? restored = PackManifest.TryLoad(PackManifest.PathFor(instanceDir));
+        return restored is null
+            ? current with { PackUrl = null, ServerAddress = null, ServerPort = null }
+            : restored.ToInstanceBinding(current);
+    }
 
     // 清单里的相对路径 → 实际下载地址；显式 Url 优先，路径按段转义（中文/空格文件名也能下）。
     public static string ResolveUrl(string baseUrl, PackFileEntry entry)

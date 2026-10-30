@@ -347,6 +347,69 @@ public class PackSyncTests
     }
 
     [Fact]
+    public void BindingAfterRollback_ClearsPackBinding_WhenManifestIsGone()
+    {
+        string dir = TempDir("bind");
+        try
+        {
+            var instance = new Instance("PVE", "1.20.4", "fabric", "Steve", "0.15.11",
+                PackUrl: "https://host/pack.json", ServerAddress: "mc.example.com", ServerPort: 25566);
+
+            // 没有 pack.json：说明同步前这个实例不归任何包管，绑定要清掉
+            Instance cleared = PackSync.BindingAfterRollback(dir, instance);
+            Assert.Null(cleared.PackUrl);
+            Assert.Null(cleared.ServerAddress);
+            Assert.Null(cleared.ServerPort);
+            Assert.Equal("1.20.4", cleared.VersionId);
+
+            // 有旧清单：按清单回填
+            new PackManifest
+            {
+                MinecraftVersion = "1.20.1",
+                Loader = "fabric",
+                Server = new PackServerInfo("old.example.com", 25565),
+            }.Save(PackManifest.PathFor(dir));
+
+            Instance restored = PackSync.BindingAfterRollback(dir, instance);
+            Assert.Equal("https://host/pack.json", restored.PackUrl);
+            Assert.Equal("old.example.com", restored.ServerAddress);
+            Assert.Equal(25565, restored.ServerPort);
+            Assert.Equal("1.20.1", restored.VersionId);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ToInstanceBinding_FollowsRestoredManifest_AndClearsServerWhenGone()
+    {
+        var instance = new Instance("PVE", "1.20.4", "fabric", "Steve", "0.15.11",
+            PackUrl: "https://host/pack.json", ServerAddress: "new.example.com", ServerPort: 25566);
+
+        var older = new PackManifest
+        {
+            MinecraftVersion = "1.20.1",
+            Loader = "fabric",
+            LoaderVersion = "0.14.21",
+            Server = new PackServerInfo("old.example.com", 25565),
+        };
+
+        Instance rolledBack = older.ToInstanceBinding(instance);
+        Assert.Equal("1.20.1", rolledBack.VersionId);
+        Assert.Equal("0.14.21", rolledBack.LoaderVersion);
+        Assert.Equal("old.example.com", rolledBack.ServerAddress);
+        Assert.Equal(25565, rolledBack.ServerPort);
+        Assert.Equal("https://host/pack.json", rolledBack.PackUrl); // 同步来源不变
+
+        var noServer = new PackManifest { MinecraftVersion = "1.20.1", Loader = "fabric" };
+        Instance cleared = noServer.ToInstanceBinding(instance);
+        Assert.Null(cleared.ServerAddress);
+        Assert.Null(cleared.ServerPort);
+    }
+
+    [Fact]
     public void ServerInfo_ParsesForms_AndBuildsGameArgs()
     {
         Assert.Equal(new PackServerInfo("mc.example.com"), PackServerInfo.Parse("mc.example.com"));

@@ -403,6 +403,14 @@ if (packRollbackFlag)
     try
     {
         RollbackResult rollback = SyncSnapshotStore.RollbackWithReport(gameDirArg, snapshotArg, Console.WriteLine);
+
+        // 文件回去了，实例记录也回到旧清单（服务器地址跟着回滚）
+        Instance? rollbackInstance = FindInstanceForDir(gameDirArg);
+        if (rollbackInstance is not null)
+        {
+            InstanceStore.AddOrUpdate(installRoot, PackSync.BindingAfterRollback(gameDirArg, rollbackInstance));
+        }
+
         Console.WriteLine($"回滚完成：{rollback.Restored} 个文件恢复到同步前，校验不一致 {rollback.Mismatches}");
         return rollback.Mismatches == 0 ? 0 : 2;
     }
