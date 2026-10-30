@@ -14,7 +14,18 @@
 
 > 旧版本依赖的运行环境会自动补齐，无需手动装 Java。
 
+## 下载
 
+到 [Releases](https://github.com/Yulincarp/Lx-yulincarp-/releases/latest) 页面下载（当前最新为 **v1.4.1**）：
+
+| 文件 | 说明 |
+|---|---|
+| `Lx-yulin-carp-1.4.1-Setup.exe` | Windows 安装程序（64 位），约 74 MB，推荐 |
+| `Lx-yulin-carp-1.4.1-win-x64.zip` | 免安装压缩包，解压后运行 `Lx yulin carp.exe` |
+| `Lx-yulin-carp-remote-1.4.1.apk` | 手机遥控 APK，装在手机上连电脑上的启动器 |
+| `update.json` | 自动更新清单，放进启动器数据目录即可启用「检查更新」 |
+
+> 仓库根目录不再存放安装包，请统一从 Releases 下载。
 
 ## 安装
 
