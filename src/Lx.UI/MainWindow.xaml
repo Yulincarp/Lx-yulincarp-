@@ -164,7 +164,13 @@
                                 <TextBox x:Name="NewInstanceName" Height="28" Margin="0,0,0,8" ToolTip="留空则自动用版本名"/>
                                 <WrapPanel Margin="0,0,0,8">
                                     <Button Content="新建" Click="CreateInstance_Click" Padding="14,4" Margin="0,0,8,0"/>
-                                    <Button Content="删除" Click="DeleteInstance_Click" Padding="14,4" Margin="0,0,8,0"/>
+                                    <Button Content="改名" Click="RenameInstance_Click" Padding="14,4" Margin="0,0,8,0"
+                                            ToolTip="记录和目录一起改名"/>
+                                    <Button Content="复制" Click="CopyInstance_Click" Padding="14,4" Margin="0,0,8,0"
+                                            ToolTip="复制成新实例；默认不带存档，避免两边都以为在用同一份世界"/>
+                                    <Button Content="删除" Click="DeleteInstance_Click" Padding="14,4" Margin="0,0,8,0"
+                                            ToolTip="会先问：只删记录，还是连文件一起删"/>
+                                    <Button Content="打开目录" Click="OpenInstanceDir_Click" Padding="14,4" Margin="0,0,8,0"/>
                                     <Button Content="导入" Click="ImportPack_Click" Padding="14,4" Margin="0,0,8,0"/>
                                     <Button x:Name="UpdatePackButton" Content="更新包" Click="UpdatePack_Click" Padding="14,4"
                                             ToolTip="只有用「导入」创建的整合包实例才能更新"/>

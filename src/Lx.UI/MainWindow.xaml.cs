@@ -1187,6 +1187,92 @@ public partial class MainWindow : Window
         }
     }
 
+    private void RenameInstance_Click(object sender, RoutedEventArgs e)
+    {
+        if (InstancesList.SelectedItem is not Instance instance)
+        {
+            Log("先选中一个实例");
+            return;
+        }
+
+        var dialog = new InstanceNameWindow("实例改名", $"把「{instance.Name}」改成：", instance.Name) { Owner = this };
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        try
+        {
+            Instance renamed = InstanceService.Rename(
+                _installRoot,
+                instance.Name,
+                dialog.Value,
+                message => Dispatcher.Invoke(() => Log(message)));
+
+            RefreshInstances(renamed.Name);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            LogError("实例改名失败", ex);
+        }
+    }
+
+    private void CopyInstance_Click(object sender, RoutedEventArgs e)
+    {
+        if (InstancesList.SelectedItem is not Instance instance)
+        {
+            Log("先选中一个实例");
+            return;
+        }
+
+        var dialog = new InstanceNameWindow("复制实例", $"把「{instance.Name}」复制成：", $"{instance.Name} 副本") { Owner = this };
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        try
+        {
+            Instance clone = InstanceService.Copy(
+                _installRoot,
+                instance.Name,
+                dialog.Value,
+                includeSaves: false,
+                log: message => Dispatcher.Invoke(() => Log(message)));
+
+            RefreshInstances(clone.Name);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            LogError("复制实例失败", ex);
+        }
+    }
+
+    private void OpenInstanceDir_Click(object sender, RoutedEventArgs e)
+    {
+        if (InstancesList.SelectedItem is not Instance instance)
+        {
+            Log("先选中一个实例");
+            return;
+        }
+
+        string dir = InstanceStore.DirFor(_installRoot, instance.Name);
+        if (!Directory.Exists(dir))
+        {
+            Log($"[错误] 实例目录不存在：{dir}");
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{dir}\"") { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or System.ComponentModel.Win32Exception)
+        {
+            LogError("打开实例目录失败", ex);
+        }
+    }
+
     private void DeleteInstance_Click(object sender, RoutedEventArgs e)
     {
         if (InstancesList.SelectedItem is not Instance instance)
@@ -1195,9 +1281,47 @@ public partial class MainWindow : Window
             return;
         }
 
-        InstanceStore.Remove(_installRoot, instance.Name);
-        RefreshInstances();
-        Log($"已删除实例记录：{instance.Name}（文件保留在 {InstanceStore.DirFor(_installRoot, instance.Name)}）");
+        string dir = InstanceStore.DirFor(_installRoot, instance.Name);
+        MessageBoxResult choice = MessageBox.Show(
+            this,
+            $"删除实例「{instance.Name}」？\n\n{dir}\n\n" +
+            "是：连文件一起删（存档、mods 都没了，不能恢复）\n" +
+            "否：只删记录，文件保留在磁盘上\n" +
+            "取消：什么都不做",
+            "删除实例",
+            MessageBoxButton.YesNoCancel,
+            MessageBoxImage.Warning,
+            MessageBoxResult.Cancel);
+
+        if (choice == MessageBoxResult.Cancel)
+        {
+            return;
+        }
+
+        bool deleteFiles = choice == MessageBoxResult.Yes;
+        try
+        {
+            if (!InstanceService.Delete(
+                    _installRoot,
+                    instance.Name,
+                    deleteFiles,
+                    message => Dispatcher.Invoke(() => Log(message))))
+            {
+                Log($"[警告] 记录里没有这个实例：{instance.Name}");
+                return;
+            }
+
+            if (!deleteFiles)
+            {
+                Log($"文件保留在：{dir}");
+            }
+
+            RefreshInstances();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogError("删除实例失败", ex);
+        }
     }
 
     // 当前实例的游戏目录；没有实例时退回"版本目录"。
