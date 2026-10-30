@@ -108,7 +108,7 @@ namespace Lx.Setup
 
         public SetupForm()
         {
-            Text = "Lx yulin carp 1.4.0 安装";
+            Text = "Lx yulin carp 1.4.1 安装";
             Width = 620;
             Height = 300;
             StartPosition = FormStartPosition.CenterScreen;
@@ -119,7 +119,7 @@ namespace Lx.Setup
 
             var title = new Label
             {
-                Text = "Lx yulin carp 1.4.0",
+                Text = "Lx yulin carp 1.4.1",
                 Font = new Font("Microsoft YaHei UI", 16F, FontStyle.Bold),
                 Left = 24,
                 Top = 18,

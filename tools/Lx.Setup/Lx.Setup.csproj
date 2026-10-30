@@ -5,13 +5,19 @@
     <UseWindowsForms>true</UseWindowsForms>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
-    <AssemblyName>Lx-yulin-carp-1.4.0-Setup</AssemblyName>
+    <!-- 版本号来自仓库根目录 Directory.Build.props；这里不再写死，会自动变成 Lx-yulin-carp-1.4.1-Setup -->
+    <AssemblyName>Lx-yulin-carp-$(Version)-Setup</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- 默认载荷：dist 下当前版本的 win-x64 zip；release.ps1 会显式传 -p:PayloadZip=... -->
+    <PayloadZip Condition="'$(PayloadZip)' == ''">$(MSBuildThisFileDirectory)..\..\dist\Lx-yulin-carp-$(Version)-win-x64.zip</PayloadZip>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
-    <EmbeddedResource Include="..\..\dist\Lx-yulin-carp-1.4.0-win-x64.zip" LogicalName="payload.zip" />
+    <EmbeddedResource Include="$(PayloadZip)" LogicalName="payload.zip" Condition="Exists('$(PayloadZip)')" />
   </ItemGroup>
+  <Target Name="EnsurePayload" BeforeTargets="PrepareForBuild" Condition="!Exists('$(PayloadZip)')">
+    <Error Text="找不到安装载荷：$(PayloadZip)。先运行 publish.ps1 生成 zip，或用 -p:PayloadZip=&lt;zip 路径&gt; 指定。" />
+  </Target>
 </Project>

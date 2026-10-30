@@ -1,6 +1,8 @@
-param(
+﻿param(
     [string]$Repo = $env:GITHUB_REPOSITORY,
     [string]$Notes = "",
+    # update.json 的 minVersion；留空则用当前版本号
+    [string]$MinVersion = "",
     [ValidateSet("stable", "beta")]
     [string]$Channel = "stable",
     [string]$Runtime = "win-x64",
@@ -43,13 +45,27 @@ if (-not (Test-Path $zip)) {
 
 $setup = Join-Path $root "dist\Lx-yulin-carp-$version-Setup.exe"
 Write-Host "Building Setup.exe..."
-dotnet build "tools\Lx.Setup\Lx.Setup.csproj" -c Release --nologo
+dotnet build "tools\Lx.Setup\Lx.Setup.csproj" -c Release --nologo "-p:PayloadZip=$zip"
 if ($LASTEXITCODE -ne 0) {
     throw "Setup build failed"
 }
-Copy-Item "tools\Lx.Setup\bin\Release\net48\Lx-yulin-carp-1.4.0-Setup.exe" $setup -Force
+# 优先按"当前版本"精确找；找不到再退回最新的 *-Setup.exe
+$setupOutDir = Join-Path $root "tools\Lx.Setup\bin\Release\net48"
+$builtSetup = Get-Item (Join-Path $setupOutDir "Lx-yulin-carp-$version-Setup.exe") -ErrorAction SilentlyContinue
+if (-not $builtSetup) {
+    $builtSetup = Get-ChildItem $setupOutDir -Filter "*-Setup.exe" -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+}
+if (-not $builtSetup) {
+    throw "Setup.exe 没有产出（tools\Lx.Setup\bin\Release\net48 下找不到 *-Setup.exe）"
+}
+Copy-Item -LiteralPath $builtSetup.FullName -Destination $setup -Force
 
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
+if (-not $Repo -or -not $Repo.Contains("/")) {
+    Write-Warning "没有传 -Repo：update.json 的 url 会是占位地址，只适合本地测试"
+}
+
 $baseUrl = if ($Repo -and $Repo.Contains("/")) {
     "https://github.com/$Repo/releases/download/v$version"
 } else {
@@ -62,12 +78,14 @@ if ([string]::IsNullOrWhiteSpace($Notes)) {
 }
 
 $manifestName = if ($Channel -eq "beta") { "update-beta.json" } else { "update.json" }
+$effectiveMinVersion = if ([string]::IsNullOrWhiteSpace($MinVersion)) { $version } else { $MinVersion }
+
 $manifest = [ordered]@{
     version = $version
     url = "$baseUrl/$assetName"
     sha256 = $hash
     notes = $Notes
-    minVersion = "1.4.0"
+    minVersion = $effectiveMinVersion
     channel = $Channel
 } | ConvertTo-Json -Depth 5
 
