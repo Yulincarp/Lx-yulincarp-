@@ -23,8 +23,16 @@ public static class UpdateService
     public static bool CanSelfUpdate =>
         !AppContext.BaseDirectory.Contains(Path.Combine("src", "Lx.UI", "bin"), StringComparison.OrdinalIgnoreCase);
 
-    // update.json 地址：LX_UPDATE_URL 优先，其次数据目录下的 update.json（方便本地测试）。
-    public static string? ResolveManifestUrl(string installRoot)
+    // 默认查询地址：GitHub Release 的 latest 资产，跟着每次发版自动指向最新。
+    // 国内直连 github.com 可能不稳，用户/测试仍可用 LX_UPDATE_URL 覆盖成本地文件或镜像。
+    public const string DefaultManifestUrl =
+        "https://github.com/Yulincarp/Lx-yulincarp-/releases/latest/download/update.json";
+
+    public const string DefaultBetaManifestUrl =
+        "https://github.com/Yulincarp/Lx-yulincarp-/releases/latest/download/update-beta.json";
+
+    // update.json 地址：LX_UPDATE_URL 优先，其次数据目录下的 update.json（方便本地测试），最后走内置默认地址。
+    public static string ResolveManifestUrl(string installRoot)
     {
         string? fromEnv = Environment.GetEnvironmentVariable("LX_UPDATE_URL");
         if (!string.IsNullOrWhiteSpace(fromEnv))
@@ -32,12 +40,18 @@ public static class UpdateService
             return fromEnv.Trim();
         }
 
-        string channel = SettingsStore.Load(installRoot).UpdateChannel ?? "stable";
-        string fileName = string.Equals(channel, "beta", StringComparison.OrdinalIgnoreCase)
-            ? "update-beta.json"
-            : "update.json";
+        bool beta = string.Equals(
+            SettingsStore.Load(installRoot).UpdateChannel,
+            "beta",
+            StringComparison.OrdinalIgnoreCase);
+        string fileName = beta ? "update-beta.json" : "update.json";
         string local = Path.Combine(installRoot, fileName);
-        return File.Exists(local) ? local : null;
+        if (File.Exists(local))
+        {
+            return local;
+        }
+
+        return beta ? DefaultBetaManifestUrl : DefaultManifestUrl;
     }
 
     public static bool IsNewer(string candidate, string current) =>

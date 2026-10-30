@@ -39,7 +39,7 @@
 | H4 的一部分 | CI（`ci.yml` / `release.yml`）、单文件发布、Setup.exe、数据目录迁移、自更新 |
 | C1 手机遥控 | `2b2aa51`：局域网 HTTP 服务 + 手机网页 + APK（WebView 壳） |
 
-当前版本 **v1.4.1**（`Directory.Build.props` 是唯一来源；默认数据目录改为 `%APPDATA%\Lx yulin carp\.minecraft`），`dist\` 里已有 `Lx-yulin-carp-1.4.1-win-x64.zip`、`Lx-yulin-carp-1.4.1-Setup.exe`、`Lx-yulin-carp-remote-1.4.0.apk`、`update.json`。
+当前版本 **v1.4.2**（`Directory.Build.props` 是唯一来源；默认数据目录 `%APPDATA%\Lx yulin carp\.minecraft`，自更新默认查 GitHub Release 的 latest/update.json），`dist\` 里已有 `Lx-yulin-carp-1.4.2-win-x64.zip`、`Lx-yulin-carp-1.4.2-Setup.exe`、`Lx-yulin-carp-remote-1.4.1.apk`、`update.json`。
 
 **剩余（按优先级）**
 

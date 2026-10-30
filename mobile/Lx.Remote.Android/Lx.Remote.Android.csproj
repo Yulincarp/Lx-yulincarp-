@@ -4,7 +4,7 @@
     <TargetFramework>net8.0-android</TargetFramework>
     <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
     <ApplicationId>com.lxyulincarp.remote</ApplicationId>
-    <ApplicationVersion>141</ApplicationVersion>
+    <ApplicationVersion>142</ApplicationVersion>
     <ApplicationDisplayVersion>$(Version)</ApplicationDisplayVersion>
     <RootNamespace>Lx.Remote.Android</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
