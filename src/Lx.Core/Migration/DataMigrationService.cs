@@ -28,6 +28,8 @@ public static class DataMigrationService
         {
             Path.Combine(appData, "Lx"),
             Path.Combine(appData, "Lx Launcher"),
+            // 1.4.0 及更早的默认数据目录；现在默认是 …\Lx yulin carp\.minecraft，老用户靠这里被认出来。
+            Path.Combine(appData, AppInfo.DataDirectoryName),
         };
 
         return candidates.FirstOrDefault(IsLikelyDataRoot);

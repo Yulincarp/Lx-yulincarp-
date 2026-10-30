@@ -1,7 +1,7 @@
 namespace Lx.Probe;
 
 // 数据根目录（libraries / assets / versions / logs / accounts.json 所在处）。
-// 顺序：LX_DATA_DIR 环境变量 -> 用户设置的数据目录指针 -> exe 旁边的 portable.txt（data/）-> 开发期仓库 minecraft/ -> %APPDATA%\Lx yulin carp。
+// 顺序：LX_DATA_DIR 环境变量 -> 用户设置的数据目录指针 -> exe 旁边的 portable.txt（data/）-> 开发期仓库 minecraft/ -> %APPDATA%\Lx yulin carp\.minecraft。
 // 所有需要"数据放哪"的代码都走这里，别再各写一份。
 public static class AppPaths
 {
@@ -73,6 +73,7 @@ public static class AppPaths
 
         try
         {
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!); // 默认目录现在是 …\Lx yulin carp\.minecraft，父目录可能还不存在
             Directory.Move(legacy, target); // 同一分区时只是改名，不会复制 700 MB
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -108,7 +109,7 @@ public static class AppPaths
 
         if (!string.IsNullOrWhiteSpace(appDataDir))
         {
-            return Path.Combine(appDataDir, AppInfo.DataDirectoryName);
+            return Path.Combine(appDataDir, AppInfo.DataDirectoryName, AppInfo.DataFolderName);
         }
 
         return Path.Combine(baseDir, "data");

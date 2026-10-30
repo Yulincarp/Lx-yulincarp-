@@ -50,7 +50,8 @@ public class AppPathsTests
             Directory.CreateDirectory(app);
 
             string install = AppPaths.ResolveFor(app, appData);
-            Assert.Equal(Path.Combine(appData, AppInfo.DataDirectoryName), install);
+            Assert.Equal(Path.Combine(appData, AppInfo.DataDirectoryName, AppInfo.DataFolderName), install);
+            Assert.EndsWith(Path.Combine("Lx yulin carp", ".minecraft"), install, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

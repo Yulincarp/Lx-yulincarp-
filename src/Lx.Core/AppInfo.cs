@@ -6,7 +6,10 @@ namespace Lx.Probe;
 public static class AppInfo
 {
     public const string ProductName = "Lx yulin carp";
+    // 指针文件 / 日志用：%APPDATA% 与 %LOCALAPPDATA% 下的产品目录。
     public const string DataDirectoryName = "Lx yulin carp";
+    // 默认数据目录是 %APPDATA%\Lx yulin carp\.minecraft，与常见启动器的 .minecraft 布局一致。
+    public const string DataFolderName = ".minecraft";
     public const string ExecutableName = "Lx yulin carp.exe";
 
     public static string Version { get; } = Format(typeof(AppInfo).Assembly.GetName().Version);
