@@ -46,7 +46,7 @@ public partial class ErrorWindow : Window
         }
         catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException)
         {
-            MessageBox.Show(this, "复制失败，请手动选中详情文本。", "复制失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, L10n.T("S285"), L10n.T("S296"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -68,7 +68,7 @@ public partial class ErrorWindow : Window
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
-            MessageBox.Show(this, $"打不开日志目录：{dir}", "打开失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, L10n.T("S286", dir), L10n.T("S297"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 

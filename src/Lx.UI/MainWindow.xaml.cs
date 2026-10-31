@@ -262,7 +262,7 @@ public partial class MainWindow : Window
         if (path.Length == 0)
         {
             Log($"导入皮肤失败：{error}");
-            MessageBox.Show(this, error, "皮肤导入失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, error, L10n.T("S298"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -416,7 +416,7 @@ public partial class MainWindow : Window
     {
         if (_remoteServer is { IsRunning: true })
         {
-            MessageBox.Show("手机遥控窗口已经打开。", "手机遥控", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(L10n.T("S287"), L10n.T("S299"), MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
@@ -441,7 +441,7 @@ public partial class MainWindow : Window
         {
             LogError("打开手机遥控失败", ex);
             _remoteServer = null;
-            MessageBox.Show(this, ex.Message, "手机遥控", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, ex.Message, L10n.T("S299"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -613,8 +613,8 @@ public partial class MainWindow : Window
         if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("LX_DATA_DIR")))
         {
             MessageBox.Show(
-                "当前启动器由 LX_DATA_DIR 环境变量指定数据目录，设置里的更改会被环境变量覆盖。\n\n请先移除 LX_DATA_DIR，再更改数据目录。",
-                "更改数据目录",
+                L10n.T("S288"),
+                L10n.T("S300"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return;
@@ -639,9 +639,8 @@ public partial class MainWindow : Window
 
         string target = dialog.FolderName;
         MessageBoxResult confirm = MessageBox.Show(
-            $"当前数据目录：{_installRoot}\n\n新数据目录：{target}\n\n" +
-            "会完整复制所有数据（包括日志），旧目录保留作为备份，完成后重启生效。现在开始吗？",
-            "更改数据目录",
+            L10n.T("S311", _installRoot, target),
+            L10n.T("S300"),
             MessageBoxButton.YesNo,
             MessageBoxImage.Question);
         if (confirm != MessageBoxResult.Yes)
@@ -668,9 +667,8 @@ public partial class MainWindow : Window
             Log($"数据目录迁移完成：{_installRoot} → {target}（{result.FilesCopied} 个文件，{result.BytesCopied / 1024.0 / 1024.0:F1} MB）");
 
             MessageBoxResult restart = MessageBox.Show(
-                $"迁移完成：{result.FilesCopied} 个文件，{result.BytesCopied / 1024.0 / 1024.0:F1} MB。\n\n" +
-                "旧目录仍然保留。现在重启启动器以使用新目录吗？",
-                "更改数据目录",
+                L10n.T("S312", result.FilesCopied, result.BytesCopied / 1024.0 / 1024.0),
+                L10n.T("S300"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Information);
             if (restart == MessageBoxResult.Yes)
@@ -690,7 +688,7 @@ public partial class MainWindow : Window
         string? exe = Environment.ProcessPath;
         if (string.IsNullOrWhiteSpace(exe) || !exe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
         {
-            MessageBox.Show("请手动关闭并重新打开启动器。", "更改数据目录",
+            MessageBox.Show(L10n.T("S289"), L10n.T("S300"),
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -727,16 +725,16 @@ public partial class MainWindow : Window
         if (!DataMigrationService.IsLikelyDataRoot(source))
         {
             MessageBox.Show(
-                "这个目录不像 Lx 数据目录。\n\n应包含 accounts.json、versions、libraries 或 assets。",
-                "数据迁移",
+                L10n.T("S290"),
+                L10n.T("S301"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return;
         }
 
         MessageBoxResult confirm = MessageBox.Show(
-            $"把旧数据复制到：{_installRoot}\n\n源目录：{source}\n\n已存在的文件会跳过，不会覆盖。现在开始吗？",
-            "从旧版导入数据",
+            L10n.T("S313", _installRoot, source),
+            L10n.T("S304"),
             MessageBoxButton.YesNo,
             MessageBoxImage.Question);
         if (confirm != MessageBoxResult.Yes)
@@ -771,7 +769,7 @@ public partial class MainWindow : Window
             }
 
             summary += "\n\n设置/账号/实例要重启启动器后才会重新加载。";
-            MessageBox.Show(summary, "数据迁移", MessageBoxButton.OK,
+            MessageBox.Show(summary, L10n.T("S301"), MessageBoxButton.OK,
                 result.Errors.Count == 0 ? MessageBoxImage.Information : MessageBoxImage.Warning);
             StatusText.Text = L10n.T("S209");
         }
@@ -1171,8 +1169,8 @@ public partial class MainWindow : Window
                 SyncStatusText.Text = L10n.T("S248", result.Failed);
                 MessageBoxResult choice = MessageBox.Show(
                     this,
-                    $"同步未完成：{result.Failed} 个文件下载失败。\n现在回滚到同步前吗？（也可以稍后点「回滚」）",
-                    "同步失败",
+                    L10n.T("S314", result.Failed),
+                    L10n.T("S305"),
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Warning);
 
@@ -1240,8 +1238,8 @@ public partial class MainWindow : Window
 
         MessageBoxResult confirm = MessageBox.Show(
             this,
-            $"恢复到 {latest.Display} 的同步前状态？\n同步之后手动改过的文件会被覆盖。",
-            "回滚整合包",
+            L10n.T("S315", latest.Display),
+            L10n.T("S306"),
             MessageBoxButton.OKCancel,
             MessageBoxImage.Warning);
 
@@ -1290,7 +1288,7 @@ public partial class MainWindow : Window
 
         string text = string.Join(Environment.NewLine, snapshots.Select(
             snapshot => $"{snapshot.Id}  {snapshot.Display}  清单 {snapshot.PreviousManifest?.PackVersion ?? "-"}"));
-        MessageBox.Show(this, text, $"同步快照（{snapshots.Count}）", MessageBoxButton.OK, MessageBoxImage.Information);
+        MessageBox.Show(this, text, L10n.T("S320", snapshots.Count), MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     // 一键进服：把服务器地址写进实例，再把 --server / --port 交给启动流程。
@@ -1472,11 +1470,8 @@ public partial class MainWindow : Window
         string dir = InstanceStore.DirFor(_installRoot, instance.Name);
         MessageBoxResult choice = MessageBox.Show(
             this,
-            $"删除实例「{instance.Name}」？\n\n{dir}\n\n" +
-            "是：连文件一起删（存档、mods 都没了，不能恢复）\n" +
-            "否：只删记录，文件保留在磁盘上\n" +
-            "取消：什么都不做",
-            "删除实例",
+            L10n.T("S316", instance.Name, dir),
+            L10n.T("S307"),
             MessageBoxButton.YesNoCancel,
             MessageBoxImage.Warning,
             MessageBoxResult.Cancel);
@@ -1953,9 +1948,8 @@ public partial class MainWindow : Window
             }
 
             MessageBoxResult choice = MessageBox.Show(
-                $"发现 {updates.Count} 个更新：{Environment.NewLine}{Environment.NewLine}{preview}" +
-                $"{Environment.NewLine}{Environment.NewLine}旧 jar 会先备份到 mods/.lx-backup，然后下载并替换。现在更新吗？",
-                "批量更新 mod",
+                L10n.T("S317", updates.Count, "\n\n" + preview),
+                L10n.T("S310"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
             if (choice != MessageBoxResult.Yes)
@@ -2037,8 +2031,8 @@ public partial class MainWindow : Window
             StatusText.Text = L10n.T("S221");
             Log($"冲突扫描：{mods.Count} 个 mod，未发现重复 id 或缺失依赖");
             MessageBox.Show(
-                $"扫描了 {mods.Count} 个 mod，未发现重复 mod id 或缺失的 required 依赖。",
-                "mod 冲突检测",
+                L10n.T("S291", mods.Count),
+                L10n.T("S302"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
             return;
@@ -2057,8 +2051,8 @@ public partial class MainWindow : Window
 
         StatusText.Text = L10n.T("S242", issues.Count);
         MessageBox.Show(
-            $"发现 {issues.Count} 个问题：{Environment.NewLine}{Environment.NewLine}{summary}",
-            "mod 冲突检测",
+            L10n.T("S292", issues.Count, "\n\n" + summary),
+            L10n.T("S302"),
             MessageBoxButton.OK,
             MessageBoxImage.Warning);
     }
@@ -2843,8 +2837,8 @@ public partial class MainWindow : Window
             Log("[提示] 游戏异常退出，点「打开日志」查看 logs/latest.log");
 
             MessageBoxResult choice = MessageBox.Show(
-                $"游戏异常退出（退出码 {code}），运行时长 {durationText}。{Environment.NewLine}{Environment.NewLine}是否打开日志目录？",
-                "游戏异常退出",
+                L10n.T("S318", code, durationText),
+                L10n.T("S308"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
 
@@ -2879,7 +2873,7 @@ public partial class MainWindow : Window
         }
 
         MessageBoxResult choice = MessageBox.Show(
-            "游戏还在运行。退出启动器不会关闭游戏，确定退出吗？",
+            L10n.T("S293"),
             "Lx yulin carp",
             MessageBoxButton.YesNo,
             MessageBoxImage.Question);

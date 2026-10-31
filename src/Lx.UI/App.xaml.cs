@@ -31,7 +31,7 @@ public partial class App : Application
 
             if (!signaled)
             {
-                MessageBox.Show("Lx yulin carp 已经在运行。", "Lx yulin carp", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(Lx.Probe.Localization.L10n.T("S284"), "Lx yulin carp", MessageBoxButton.OK, MessageBoxImage.Information);
             }
 
             // 第二个实例没有状态要保存；窗口由第一个实例负责唤醒。

@@ -156,8 +156,8 @@ public partial class SettingsWindow : Window
             }
 
             MessageBoxResult choice = MessageBox.Show(
-                $"发现新版本 v{info.Version}（当前 v{AppInfo.Version}）。{Environment.NewLine}{Environment.NewLine}现在下载并更新吗？",
-                "检查更新",
+                L10n.T("S319", info.Version, AppInfo.Version),
+                L10n.T("S309"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
             if (choice != MessageBoxResult.Yes)
@@ -170,8 +170,8 @@ public partial class SettingsWindow : Window
             StagedUpdate staged = await UpdateService.DownloadAsync(info, _installRoot, progress);
 
             MessageBoxResult apply = MessageBox.Show(
-                "更新包已下载并通过校验。现在重启启动器并安装吗？",
-                "更新",
+                L10n.T("S294"),
+                L10n.T("S303"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
             if (apply != MessageBoxResult.Yes)
@@ -251,7 +251,7 @@ public partial class SettingsWindow : Window
 
     private void Privacy_Click(object sender, RoutedEventArgs e)
     {
-        MessageBox.Show(this, Lx.Probe.Diagnostics.CrashReporter.PrivacyNotice, "崩溃上报说明",
+        MessageBox.Show(this, Lx.Probe.Diagnostics.CrashReporter.PrivacyNotice, L10n.T("S295"),
             MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
