@@ -1299,6 +1299,17 @@ public partial class MainWindow : Window
         }
 
         bool deleteFiles = choice == MessageBoxResult.Yes;
+        if (deleteFiles)
+        {
+            // 第二道保险：必须手敲实例名，"连文件删除"才可点。
+            var confirm = new DeleteConfirmWindow(instance.Name, dir) { Owner = this };
+            if (confirm.ShowDialog() != true)
+            {
+                Log("已取消：没输入实例名，文件没动");
+                return;
+            }
+        }
+
         try
         {
             if (!InstanceService.Delete(

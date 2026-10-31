@@ -402,7 +402,7 @@ Linux/macOS 不是"编译一下"：WPF 不支持，要换 Avalonia 重写 UI，�
 
 | Step | 做什么 | 预估 | 主要位置 | 验收 |
 |---|---|---|---|---|
-| m10-1 | 实例增强：改名、复制（新目录、不共享存档）、删除前确认（仅记录 / 连文件）、打开目录 | 1d | `Lx.Core/Instances/`、实例页 | 改名后 `instances.json` 与目录同步；复制出两份各自可启动 |
+| m10-1 | 实例增强：改名、复制（新目录、不共享存档）、删除前确认（仅记录 / 连文件）、打开目录 ✅ | 1d | `Lx.Core/Instances/`、实例页 | 改名后 `instances.json` 与目录同步；复制出两份各自可启动；连文件删要手敲实例名 |
 | m10-2 | 版本下拉搜索（`IsEditable` + `CollectionViewSource`）、拖 jar 到资源页安装 | 1d | `MainWindow.xaml(.cs)`、资源页 | 输入 “1.20” 立即过滤；拖入即装、重名不覆盖 |
 | m10-3 | `pack.json` v1 规范 + 从实例导出包 ✅ | 1d | 新增 `Lx.Core/Sync/PackManifest.cs`、`PackFilter.cs`、`PackExporter.cs` | 导出含 mods + sha1、配置白名单、加载器版本、删除清单；另一台机器 1:1 还原 |
 | m10-4 | 客户端增量同步（HTTP 静态 URL，下载 / 删除 / 校验）✅ | 1.5d | 新增 `Lx.Core/Sync/PackSync.cs` | 服主换 3 个 mod，玩家点同步只下差异，30 秒内对齐 |
