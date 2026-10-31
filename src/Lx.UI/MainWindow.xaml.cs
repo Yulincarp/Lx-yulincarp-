@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using Lx.Probe;
@@ -50,6 +51,12 @@ public partial class MainWindow : Window
     private RemoteControlServer? _remoteServer;
 
     private sealed record LoaderChoice(string Version, string Display, bool Stable = false);
+
+    // 版本列表：左边搜索框过滤，CollectionViewSource 只负责筛，不碰 ComboBox 的输入状态。
+    private List<ManifestVersion> _versions = new();
+    private ICollectionView? _versionView;
+    private string _versionFilter = string.Empty;
+    private string _lastVersionId = string.Empty;
 
     private readonly Dictionary<string, List<LoaderChoice>> _loaderVersionCache = new();
     private int _loaderVersionRequest;
@@ -127,10 +134,12 @@ public partial class MainWindow : Window
                     versions.Insert(0, local);
                 }
             }
-            VersionBox.ItemsSource = versions;
+            _versions = versions;
+            _versionView = CollectionViewSource.GetDefaultView(versions);
+            _versionView.Filter = VersionFilter;
+            VersionBox.ItemsSource = _versionView;
             VersionBox.DisplayMemberPath = "Id";
             VersionBox.SelectedItem = versions.FirstOrDefault(v => v.Id == "1.20.4") ?? versions.FirstOrDefault();
-
             RefreshAccounts();
             RefreshInstances();
 
@@ -732,13 +741,10 @@ public partial class MainWindow : Window
     // 实例决定：版本、是否 Fabric、账号；mods 目录也跟着实例走。
     private void ApplyInstance(Instance instance)
     {
-        if (VersionBox.ItemsSource is List<ManifestVersion> versions)
+        ManifestVersion? match = _versions.FirstOrDefault(v => v.Id == instance.VersionId);
+        if (match is not null)
         {
-            ManifestVersion? match = versions.FirstOrDefault(v => v.Id == instance.VersionId);
-            if (match is not null)
-            {
-                VersionBox.SelectedItem = match;
-            }
+            VersionBox.SelectedItem = match;
         }
 
         LoaderBox.SelectedIndex = string.Equals(instance.Loader, "fabric", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
@@ -1362,9 +1368,58 @@ public partial class MainWindow : Window
 
     private void Version_Changed(object sender, RoutedEventArgs e)
     {
+        if (VersionBox.SelectedItem is ManifestVersion { Id: { Length: > 0 } id })
+        {
+            _lastVersionId = id;
+        }
+
         RefreshMods();
         _ = ReloadLoaderVersionsAsync(null);
     }
+
+    // 左边搜索框：输入即过滤版本列表（929 个版本平铺没法用）。
+    // 不让 ComboBox 自己可编辑——WPF 的 IsEditable+Refresh 会把用户输入重置成选中项，实测会丢字符。
+    private void VersionSearch_Changed(object sender, TextChangedEventArgs e)
+    {
+        if (VersionSearchBox is null || _versionView is null)
+        {
+            return;
+        }
+
+        _versionFilter = VersionSearchBox.Text.Trim();
+        _versionView.Refresh();
+
+        if (_versionFilter.Length == 0)
+        {
+            // 清空过滤：把上一次选的版本还回去，别停在空选择上
+            ManifestVersion? restore = VersionBox.SelectedItem as ManifestVersion
+                ?? _versions.FirstOrDefault(v => string.Equals(v.Id, _lastVersionId, StringComparison.OrdinalIgnoreCase));
+            if (restore is not null)
+            {
+                VersionBox.SelectedItem = restore;
+            }
+
+            return;
+        }
+
+        List<ManifestVersion> matches = _versionView.Cast<ManifestVersion>().ToList();
+        if (matches.Count == 0)
+        {
+            return;
+        }
+
+        if (matches.Count == 1)
+        {
+            VersionBox.SelectedItem = matches[0];
+        }
+
+        VersionBox.IsDropDownOpen = true;
+    }
+
+    private bool VersionFilter(object item) =>
+        _versionFilter.Length == 0 ||
+        (item is ManifestVersion version &&
+         (version.Id ?? string.Empty).Contains(_versionFilter, StringComparison.OrdinalIgnoreCase));
 
     private void Loader_Changed(object sender, SelectionChangedEventArgs e)
     {
@@ -1523,18 +1578,16 @@ public partial class MainWindow : Window
             Log($"安装完成：{display} {choice.Version} → {installedId}");
             StatusText.Text = $"已安装 {installedId}";
 
-            if (VersionBox.ItemsSource is List<ManifestVersion> versions)
+            ManifestVersion? installed = _versions.FirstOrDefault(v =>
+                string.Equals(v.Id, installedId, StringComparison.OrdinalIgnoreCase));
+            if (installed is null)
             {
-                ManifestVersion? installed = versions.FirstOrDefault(v =>
-                    string.Equals(v.Id, installedId, StringComparison.OrdinalIgnoreCase));
-                if (installed is null)
-                {
-                    installed = new ManifestVersion { Id = installedId, Type = "local" };
-                    versions.Insert(0, installed);
-                }
-
-                VersionBox.SelectedItem = installed;
+                installed = new ManifestVersion { Id = installedId, Type = "local" };
+                _versions.Insert(0, installed);
+                _versionView?.Refresh();
             }
+
+            VersionBox.SelectedItem = installed;
 
             LoaderBox.SelectedIndex = 0;
 
@@ -1846,23 +1899,57 @@ public partial class MainWindow : Window
             return;
         }
 
-        string gameDir = CurrentGameDir();
-        Directory.CreateDirectory(ModManager.ModsDir(gameDir));
+        InstallMods(CurrentGameDir(), dialog.FileNames);
+        RefreshMods();
+    }
 
-        foreach (string file in dialog.FileNames)
+    // 拖到资源页的 jar 走同一条安装路径：重名跳过、非 jar 忽略、单个失败不影响其它文件。
+    private void ResourceView_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = HasJar(e.Data) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void ResourceView_Drop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] files)
         {
-            try
-            {
-                ModManager.Add(gameDir, file);
-                Log($"已添加 mod：{Path.GetFileName(file)}");
-            }
-            catch (Exception ex) when (ex is InvalidOperationException or IOException)
-            {
-                LogError($"添加 mod 失败：{Path.GetFileName(file)}", ex);
-            }
+            return;
         }
 
+        e.Handled = true;
+        if (!files.Any(file => file.EndsWith(".jar", StringComparison.OrdinalIgnoreCase)))
+        {
+            Log("拖进来的不是 .jar，没有安装");
+            return;
+        }
+
+        InstallMods(CurrentGameDir(), files);
         RefreshMods();
+    }
+
+    private static bool HasJar(IDataObject data)
+    {
+        if (!data.GetDataPresent(DataFormats.FileDrop) ||
+            data.GetData(DataFormats.FileDrop) is not string[] files)
+        {
+            return false;
+        }
+
+        return files.Any(file => file.EndsWith(".jar", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void InstallMods(string gameDir, IEnumerable<string> files)
+    {
+        Directory.CreateDirectory(ModManager.ModsDir(gameDir));
+        ModManager.AddManyResult result = ModManager.AddMany(gameDir, files);
+
+        foreach (string message in result.Messages)
+        {
+            Log("  " + message);
+        }
+
+        Log($"mod 安装：新增 {result.Added}，跳过 {result.Skipped}，失败 {result.Failed}（{ModManager.ModsDir(gameDir)}）");
     }
 
     private void RemoveMod_Click(object sender, RoutedEventArgs e)

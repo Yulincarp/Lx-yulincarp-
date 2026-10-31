@@ -109,7 +109,12 @@
                         <WrapPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,16,8">
                                 <TextBlock Text="版本" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBox x:Name="VersionSearchBox" Width="110" Height="26" Margin="0,0,6,0"
+                                         VerticalContentAlignment="Center"
+                                         TextChanged="VersionSearch_Changed"
+                                         ToolTip="输入 1.20 / 26.2 / fabric 过滤右边列表"/>
                                 <ComboBox x:Name="VersionBox" Width="160" VerticalAlignment="Center"
+                                          ToolTip="版本列表；左边输入框可以过滤"
                                           SelectionChanged="Version_Changed"/>
                             </StackPanel>
 
@@ -211,7 +216,8 @@
                     </GroupBox>
                 </Grid>
 
-                <Grid x:Name="ResourceView" Visibility="Collapsed">
+                <Grid x:Name="ResourceView" Visibility="Collapsed"
+                      AllowDrop="True" DragOver="ResourceView_DragOver" Drop="ResourceView_Drop">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
@@ -221,7 +227,8 @@
 
                     <StackPanel Grid.Row="0">
                         <TextBlock Text="资源" FontSize="24" FontWeight="Bold"/>
-                        <TextBlock Text="Modrinth 搜索安装 + 当前实例的本地 mods" Foreground="{DynamicResource TextSecondary}" Margin="0,4,0,0"/>
+                        <TextBlock Text="Modrinth 搜索安装 + 当前实例的本地 mods（jar 可以直接拖到这一页）"
+                                   Foreground="{DynamicResource TextSecondary}" Margin="0,4,0,0"/>
                     </StackPanel>
 
                     <GroupBox Grid.Row="1" Header="Modrinth 在线安装" Margin="0,16,0,0">

@@ -28,6 +28,57 @@ public static class ModManager
 
     public static string ModsDir(string gameDir) => Path.Combine(gameDir, "mods");
 
+    // 批量添加的结果：新增 / 已存在跳过 / 不是 jar 或复制失败。
+    public sealed record AddManyResult(int Added, int Skipped, int Failed, List<string> Messages)
+    {
+        public bool AnyAdded => Added > 0;
+    }
+
+    // 一次拖入多个 jar 时用：重名不覆盖，非 jar 跳过，单个失败不影响其它文件。
+    public static AddManyResult AddMany(string gameDir, IEnumerable<string> sources)
+    {
+        string dir = ModsDir(gameDir);
+        Directory.CreateDirectory(dir);
+
+        int added = 0;
+        int skipped = 0;
+        int failed = 0;
+        var messages = new List<string>();
+
+        foreach (string source in sources)
+        {
+            string name = Path.GetFileName(source);
+            if (!source.EndsWith(".jar", StringComparison.OrdinalIgnoreCase))
+            {
+                skipped++;
+                messages.Add($"[跳过] {name}：不是 .jar");
+                continue;
+            }
+
+            string target = Path.Combine(dir, name);
+            if (File.Exists(target))
+            {
+                skipped++;
+                messages.Add($"[跳过] {name}：mods 里已经有了，不覆盖");
+                continue;
+            }
+
+            try
+            {
+                File.Copy(source, target);
+                added++;
+                messages.Add($"[已添加] {name}");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                failed++;
+                messages.Add($"[失败] {name}：{ex.Message}");
+            }
+        }
+
+        return new AddManyResult(added, skipped, failed, messages);
+    }
+
     public static List<ModFile> List(string gameDir)
     {
         string dir = ModsDir(gameDir);
