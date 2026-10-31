@@ -133,25 +133,25 @@ public partial class SettingsWindow : Window
     {
         if (!UpdateService.CanSelfUpdate)
         {
-            HintText.Text = "开发版不支持自更新；请用 publish.ps1 生成的发布版测试。";
+            HintText.Text = L10n.T("S210");
             return;
         }
 
         string? manifestUrl = UpdateService.ResolveManifestUrl(_installRoot);
         if (manifestUrl is null)
         {
-            HintText.Text = "未配置更新地址：设置环境变量 LX_UPDATE_URL，或把 update.json 放到数据目录。";
+            HintText.Text = L10n.T("S222");
             return;
         }
 
         UpdateButton.IsEnabled = false;
         try
         {
-            HintText.Text = "正在检查更新…";
+            HintText.Text = L10n.T("S233");
             UpdateInfo? info = await UpdateService.CheckAsync(manifestUrl);
             if (info is null)
             {
-                HintText.Text = $"已是最新版本（v{AppInfo.Version}）";
+                HintText.Text = L10n.T("S257", AppInfo.Version);
                 return;
             }
 
@@ -162,11 +162,11 @@ public partial class SettingsWindow : Window
                 MessageBoxImage.Question);
             if (choice != MessageBoxResult.Yes)
             {
-                HintText.Text = "已跳过更新";
+                HintText.Text = L10n.T("S231");
                 return;
             }
 
-            var progress = new Progress<double>(p => HintText.Text = $"下载中 {p:P0}");
+            var progress = new Progress<double>(p => HintText.Text = L10n.T("S249", p));
             StagedUpdate staged = await UpdateService.DownloadAsync(info, _installRoot, progress);
 
             MessageBoxResult apply = MessageBox.Show(
@@ -176,7 +176,7 @@ public partial class SettingsWindow : Window
                 MessageBoxImage.Question);
             if (apply != MessageBoxResult.Yes)
             {
-                HintText.Text = "更新包已保留，可稍后再装";
+                HintText.Text = L10n.T("S206");
                 return;
             }
 
@@ -185,7 +185,7 @@ public partial class SettingsWindow : Window
         }
         catch (Exception ex)
         {
-            HintText.Text = "更新失败：" + ex.Message;
+            HintText.Text = L10n.T("S207") + ex.Message;
         }
         finally
         {

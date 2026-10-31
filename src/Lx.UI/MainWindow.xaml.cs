@@ -183,7 +183,7 @@ public partial class MainWindow : Window
 
         if (AccountBox?.SelectedItem is not Account account)
         {
-            AccountDetailText.Text = "还没有账号：先输入离线名点「添加」，或直接用「正版登录」。";
+            AccountDetailText.Text = L10n.T("S283");;
             AvatarLetter.Text = "?";
             AvatarLetter.Visibility = Visibility.Visible;
             AccountAvatar.Visibility = Visibility.Collapsed;
@@ -192,24 +192,24 @@ public partial class MainWindow : Window
 
         string type = account.Type switch
         {
-            "microsoft" => "微软正版",
-            "yggdrasil" => "外置登录",
-            _ => "离线",
+            "microsoft" => L10n.T("S276"),
+            "yggdrasil" => L10n.T("S277"),
+            _ => L10n.T("S278"),
         };
 
         var builder = new StringBuilder();
-        builder.Append($"类型：{type}");
+        builder.Append(L10n.T("S272", type));
         if (account.ApiRoot is { Length: > 0 } api && Uri.TryCreate(api, UriKind.Absolute, out Uri? apiUri))
         {
             builder.Append($"（{apiUri.Host}）");
         }
 
         builder.AppendLine();
-        builder.AppendLine($"UUID：{account.Uuid}");
-        builder.Append($"会话：{DescribeSession(account)}");
+        builder.AppendLine(L10n.T("S273", account.Uuid));
+        builder.Append(L10n.T("S274", DescribeSession(account)));
         if (account.AvailableRoles is { Count: > 0 } roles)
         {
-            builder.Append($"　角色：{string.Join("、", roles.Select(role => role.Name))}");
+            builder.Append(L10n.T("S275", string.Join("、", roles.Select(role => role.Name))));
         }
 
         AccountDetailText.Text = builder.ToString();
@@ -224,19 +224,19 @@ public partial class MainWindow : Window
     {
         if (account.Type == "offline")
         {
-            return "本地离线账号，不会过期";
+            return L10n.T("S279");
         }
 
         if (account.ExpiresAt is not { } expires)
         {
-            return "有效期未知";
+            return L10n.T("S280");
         }
 
         DateTimeOffset local = expires.ToLocalTime();
         TimeSpan remaining = expires - DateTimeOffset.Now;
         return remaining <= TimeSpan.Zero
-            ? $"已过期（{local:yyyy-MM-dd HH:mm}），需要重新登录"
-            : $"有效期至 {local:yyyy-MM-dd HH:mm}（还剩 {Math.Max(0, (int)remaining.TotalDays)} 天）";
+            ? L10n.T("S281", $"{local:yyyy-MM-dd HH:mm}")
+            : L10n.T("S282", $"{local:yyyy-MM-dd HH:mm}", Math.Max(0, (int)remaining.TotalDays));
     }
 
     private void PickSkin_Click(object sender, RoutedEventArgs e)
@@ -649,10 +649,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        StatusText.Text = "正在迁移数据目录…";
+        StatusText.Text = L10n.T("S235");
         var progress = new Progress<DataDirectoryMoveProgress>(p =>
         {
-            StatusText.Text = $"迁移 {p.FilesCopied} 个文件 / {p.BytesCopied / 1024.0 / 1024.0:F1} MB";
+            StatusText.Text = L10n.T("S245", p.FilesCopied, p.BytesCopied / 1024.0 / 1024.0);
         });
 
         try
@@ -664,7 +664,7 @@ public partial class MainWindow : Window
 
             DataLocationStore.Write(target);
             _settingsSummary.SetDataDirectory(target);
-            StatusText.Text = "数据目录已迁移，重启后生效";
+            StatusText.Text = L10n.T("S216");
             Log($"数据目录迁移完成：{_installRoot} → {target}（{result.FilesCopied} 个文件，{result.BytesCopied / 1024.0 / 1024.0:F1} MB）");
 
             MessageBoxResult restart = MessageBox.Show(
@@ -680,7 +680,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            StatusText.Text = "数据目录迁移失败";
+            StatusText.Text = L10n.T("S215");
             LogError("更改数据目录失败", ex);
         }
     }
@@ -744,10 +744,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        StatusText.Text = "正在迁移旧数据…";
+        StatusText.Text = L10n.T("S234");
         var progress = new Progress<DataMigrationProgress>(p =>
         {
-            StatusText.Text = $"迁移 {p.FilesCopied} 个文件 / {p.BytesCopied / 1024.0 / 1024.0:F1} MB";
+            StatusText.Text = L10n.T("S245", p.FilesCopied, p.BytesCopied / 1024.0 / 1024.0);
         });
 
         try
@@ -773,11 +773,11 @@ public partial class MainWindow : Window
             summary += "\n\n设置/账号/实例要重启启动器后才会重新加载。";
             MessageBox.Show(summary, "数据迁移", MessageBoxButton.OK,
                 result.Errors.Count == 0 ? MessageBoxImage.Information : MessageBoxImage.Warning);
-            StatusText.Text = "旧数据迁移完成，重启后生效";
+            StatusText.Text = L10n.T("S209");
         }
         catch (Exception ex)
         {
-            StatusText.Text = "数据迁移失败";
+            StatusText.Text = L10n.T("S217");
             LogError("数据迁移失败", ex);
         }
     }
@@ -949,7 +949,7 @@ public partial class MainWindow : Window
         SyncStatusText.Text = instance.PackUrl is { Length: > 0 }
             ? $"已绑定同步地址；点「同步」拉取最新版本，点「进服」直接连服务器。"
             : "导出：生成可上传的目录；同步：按 pack.json 只传差异并保留快照；进服：同步后直接连服务器。";
-        StatusText.Text = $"实例：{instance.Name}";
+        StatusText.Text = L10n.T("S246", instance.Name);
         RefreshMods();
     }
 
@@ -1101,7 +1101,7 @@ public partial class MainWindow : Window
 
         try
         {
-            SyncStatusText.Text = "正在导出…（要算一遍 sha1，大包会慢一会儿）";
+            SyncStatusText.Text = L10n.T("S232");
             var exportOptions = new PackExportOptions(
                 PackName: instance.Name,
                 PackVersion: DateTime.Now.ToString("yyyy.MM.dd"),
@@ -1117,14 +1117,14 @@ public partial class MainWindow : Window
                 exportOptions,
                 message => Dispatcher.Invoke(() => Log(message))));
 
-            SyncStatusText.Text = $"已导出 {result.FileCount} 个文件（{result.TotalBytes / 1024.0 / 1024.0:F1} MB）→ {output}";
+            SyncStatusText.Text = L10n.T("S253", result.FileCount, result.TotalBytes / 1024.0 / 1024.0, output);
             PackSyncUrlBox.Text = result.ManifestPath;
             Log($"把整个目录传到静态托管（Nginx / 对象存储 / GitHub Pages），客户端填 <基地址>/pack.json");
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or LxException)
         {
             ShowError("导出整合包失败", ex);
-            SyncStatusText.Text = "导出失败，详情见日志";
+            SyncStatusText.Text = L10n.T("S205");
         }
     }
 
@@ -1168,7 +1168,7 @@ public partial class MainWindow : Window
 
             if (!result.Success)
             {
-                SyncStatusText.Text = $"同步失败：{result.Failed} 个文件没下全；已保留同步前快照";
+                SyncStatusText.Text = L10n.T("S248", result.Failed);
                 MessageBoxResult choice = MessageBox.Show(
                     this,
                     $"同步未完成：{result.Failed} 个文件下载失败。\n现在回滚到同步前吗？（也可以稍后点「回滚」）",
@@ -1181,7 +1181,7 @@ public partial class MainWindow : Window
                     RollbackResult rollback = SyncSnapshotStore.RollbackWithReport(
                         dir, result.SnapshotId, message => Dispatcher.Invoke(() => Log(message)));
                     RestoreInstanceBinding(dir, instance);
-                    SyncStatusText.Text = $"已回滚：恢复/删除 {rollback.Restored} 个文件，校验不一致 {rollback.Mismatches}";
+                    SyncStatusText.Text = L10n.T("S255", rollback.Restored, rollback.Mismatches);
                     RefreshMods();
                 }
 
@@ -1203,17 +1203,17 @@ public partial class MainWindow : Window
                 ServerPort = result.Manifest.Server?.Port ?? instance.ServerPort,
             });
 
-            SyncStatusText.Text = $"已同步到 {result.Manifest.PackVersion}：下载 {result.Downloaded}，删除 {result.Deleted}，已是最新 {result.Plan.Unchanged}";
+            SyncStatusText.Text = L10n.T("S258", result.Manifest.PackVersion, result.Downloaded, result.Deleted, result.Plan.Unchanged);
             RefreshMods();
         }
         catch (OperationCanceledException)
         {
-            SyncStatusText.Text = "同步已取消";
+            SyncStatusText.Text = L10n.T("S220");
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or HttpRequestException or LxException)
         {
             ShowError("同步整合包失败", ex);
-            SyncStatusText.Text = "同步失败，详情见日志";
+            SyncStatusText.Text = L10n.T("S219");
         }
         finally
         {
@@ -1254,7 +1254,7 @@ public partial class MainWindow : Window
         {
             RollbackResult rollback = SyncSnapshotStore.RollbackWithReport(dir, latest.Id, message => Dispatcher.Invoke(() => Log(message)));
             RestoreInstanceBinding(dir, instance);
-            SyncStatusText.Text = $"已回滚到 {latest.Id}：恢复/删除 {rollback.Restored} 个文件，校验不一致 {rollback.Mismatches}";
+            SyncStatusText.Text = L10n.T("S256", latest.Id, rollback.Restored, rollback.Mismatches);
             RefreshMods();
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
@@ -1744,7 +1744,7 @@ public partial class MainWindow : Window
         InstallLoaderButton.IsEnabled = false;
         LaunchButton.IsEnabled = false;
         Progress.IsIndeterminate = true;
-        StatusText.Text = $"正在安装 {display} {choice.Version}…";
+        StatusText.Text = L10n.T("S260", display, choice.Version);
 
         var progress = new Progress<LoaderInstallProgress>(p =>
         {
@@ -1764,7 +1764,7 @@ public partial class MainWindow : Window
                 cancellationToken: cts.Token);
 
             Log($"安装完成：{display} {choice.Version} → {installedId}");
-            StatusText.Text = $"已安装 {installedId}";
+            StatusText.Text = L10n.T("S251", installedId);
 
             ManifestVersion? installed = _versions.FirstOrDefault(v =>
                 string.Equals(v.Id, installedId, StringComparison.OrdinalIgnoreCase));
@@ -1793,12 +1793,12 @@ public partial class MainWindow : Window
         catch (OperationCanceledException)
         {
             Log($"已取消安装 {display}");
-            StatusText.Text = "已取消安装";
+            StatusText.Text = L10n.T("S229");
         }
         catch (Exception ex)
         {
             LogError($"安装 {display} 失败", ex);
-            StatusText.Text = "安装失败";
+            StatusText.Text = L10n.T("S203");
         }
         finally
         {
@@ -1822,7 +1822,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        StatusText.Text = "正在取消安装…";
+        StatusText.Text = L10n.T("S237");
         CancelLoaderButton.IsEnabled = false;
         _loaderInstallCts.Cancel();
     }
@@ -1903,7 +1903,7 @@ public partial class MainWindow : Window
         List<ModFile> enabled = ModManager.List(gameDir).Where(mod => mod.Enabled).ToList();
         if (enabled.Count == 0)
         {
-            StatusText.Text = "没有启用的 mod";
+            StatusText.Text = L10n.T("S211");
             Log("没有启用的 mod");
             return;
         }
@@ -1911,7 +1911,7 @@ public partial class MainWindow : Window
         _updatingMods = true;
         CheckUpdatesButton.IsEnabled = false;
         ScanConflictsButton.IsEnabled = false;
-        StatusText.Text = "检查 mod 更新…";
+        StatusText.Text = L10n.T("S208");
         var updates = new List<ModUpdate>();
 
         try
@@ -1939,7 +1939,7 @@ public partial class MainWindow : Window
 
             if (updates.Count == 0)
             {
-                StatusText.Text = "全部已是最新";
+                StatusText.Text = L10n.T("S213");
                 Log("全部已是最新");
                 return;
             }
@@ -1960,7 +1960,7 @@ public partial class MainWindow : Window
                 MessageBoxImage.Question);
             if (choice != MessageBoxResult.Yes)
             {
-                StatusText.Text = "已取消更新";
+                StatusText.Text = L10n.T("S230");
                 return;
             }
 
@@ -1974,7 +1974,7 @@ public partial class MainWindow : Window
             {
                 Progress.Maximum = Math.Max(p.Total, 1);
                 Progress.Value = p.Done;
-                StatusText.Text = $"更新 mod {p.Done}/{p.Total}";
+                StatusText.Text = L10n.T("S243", p.Done, p.Total);
             });
             Action<DownloadFailure> onFailure = failure => _downloadFailures.Enqueue(failure);
 
@@ -1989,13 +1989,13 @@ public partial class MainWindow : Window
             {
                 CopyFailuresButton.IsEnabled = true;
                 CopyFailuresButton.Content = L10n.T("S166", failed);
-                StatusText.Text = $"更新完成，失败 {failed} 个";
+                StatusText.Text = L10n.T("S244", failed);
                 Log($"[警告] mod 更新完成，失败 {failed} 个");
             }
             else
             {
                 Progress.Value = Progress.Maximum;
-                StatusText.Text = $"已更新 {updates.Count} 个 mod";
+                StatusText.Text = L10n.T("S254", updates.Count);
                 Log($"mod 批量更新完成：{updates.Count} 个");
             }
 
@@ -2003,7 +2003,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            StatusText.Text = "mod 批量更新失败";
+            StatusText.Text = L10n.T("S201");
             LogError("mod 批量更新失败", ex);
         }
         finally
@@ -2026,7 +2026,7 @@ public partial class MainWindow : Window
         List<ModFile> mods = ModManager.List(gameDir);
         if (mods.Count == 0)
         {
-            StatusText.Text = "mods 目录为空";
+            StatusText.Text = L10n.T("S202");
             Log("mods 目录为空");
             return;
         }
@@ -2034,7 +2034,7 @@ public partial class MainWindow : Window
         List<ModIssue> issues = ModDiagnostics.Scan(mods);
         if (issues.Count == 0)
         {
-            StatusText.Text = "未发现 mod 冲突";
+            StatusText.Text = L10n.T("S221");
             Log($"冲突扫描：{mods.Count} 个 mod，未发现重复 id 或缺失依赖");
             MessageBox.Show(
                 $"扫描了 {mods.Count} 个 mod，未发现重复 mod id 或缺失的 required 依赖。",
@@ -2055,7 +2055,7 @@ public partial class MainWindow : Window
             summary += Environment.NewLine + $"…以及另外 {issues.Count - 10} 个";
         }
 
-        StatusText.Text = $"发现 {issues.Count} 个 mod 问题";
+        StatusText.Text = L10n.T("S242", issues.Count);
         MessageBox.Show(
             $"发现 {issues.Count} 个问题：{Environment.NewLine}{Environment.NewLine}{summary}",
             "mod 冲突检测",
@@ -2271,7 +2271,7 @@ public partial class MainWindow : Window
         string query = ModrinthSearchBox.Text.Trim();
         if (query.Length == 0)
         {
-            ModrinthStatusText.Text = "先输入搜索关键词，例如 sodium 或 iris";
+            ModrinthStatusText.Text = L10n.T("S223");
             ModrinthStatusText.Foreground = Brushes.OrangeRed;
             Log("输入搜索关键词，例如 sodium 或 iris");
             return;
@@ -2284,7 +2284,7 @@ public partial class MainWindow : Window
             apiKey = CurseForgeClient.ResolveKey(_installRoot);
             if (apiKey is null)
             {
-                ModrinthStatusText.Text = "CurseForge 需要 API Key：先在「设置」页保存";
+                ModrinthStatusText.Text = L10n.T("S200");
                 ModrinthStatusText.Foreground = Brushes.OrangeRed;
                 Log("CurseForge 搜索缺少 API Key");
                 return;
@@ -2293,7 +2293,7 @@ public partial class MainWindow : Window
 
         string sourceName = curseForge ? "CurseForge" : "Modrinth";
         ModrinthSearchButton.IsEnabled = false;
-        ModrinthStatusText.Text = $"搜索 {sourceName}…";
+        ModrinthStatusText.Text = L10n.T("S247", sourceName);
         try
         {
             List<ModSearchResult> results = curseForge
@@ -2306,7 +2306,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            ModrinthStatusText.Text = "搜索失败";
+            ModrinthStatusText.Text = L10n.T("S218");
             LogError($"{sourceName} 搜索失败", ex);
         }
         finally
@@ -2340,7 +2340,7 @@ public partial class MainWindow : Window
 
         if (ModrinthResults.SelectedItem is not ModSearchResult project)
         {
-            ModrinthStatusText.Text = "先在搜索结果里选一个 mod（需要先点「搜索」）";
+            ModrinthStatusText.Text = L10n.T("S224");
             ModrinthStatusText.Foreground = Brushes.OrangeRed;
             Log("先在搜索结果里选一个 mod");
             return;
@@ -2357,7 +2357,7 @@ public partial class MainWindow : Window
             apiKey = CurseForgeClient.ResolveKey(_installRoot);
             if (apiKey is null)
             {
-                ModrinthStatusText.Text = "CurseForge 需要 API Key：先在「设置」页保存";
+                ModrinthStatusText.Text = L10n.T("S200");
                 ModrinthStatusText.Foreground = Brushes.OrangeRed;
                 Log("CurseForge 安装缺少 API Key");
                 return;
@@ -2368,11 +2368,11 @@ public partial class MainWindow : Window
         _modrinthBusy = true;
         ModrinthSearchButton.IsEnabled = false;
         ModrinthInstallButton.IsEnabled = false;
-        ModrinthStatusText.Text = "安装中…";
+        ModrinthStatusText.Text = L10n.T("S204");
         _downloadFailures.Clear();
         CopyFailuresButton.IsEnabled = false;
         CopyFailuresButton.Content = L10n.T("S175");
-        StatusText.Text = $"安装 {project.Title}…";
+        StatusText.Text = L10n.T("S240", project.Title);
         Progress.Value = 0;
         Progress.Maximum = 1;
 
@@ -2382,7 +2382,7 @@ public partial class MainWindow : Window
             {
                 Progress.Maximum = Math.Max(p.Total, 1);
                 Progress.Value = p.Done;
-                StatusText.Text = $"安装 {p.Done}/{p.Total}";
+                StatusText.Text = L10n.T("S239", p.Done, p.Total);
             });
 
             Action<DownloadFailure> onFailure = failure => _downloadFailures.Enqueue(failure);
@@ -2418,15 +2418,15 @@ public partial class MainWindow : Window
             {
                 CopyFailuresButton.IsEnabled = true;
                 CopyFailuresButton.Content = L10n.T("S166", failed);
-                ModrinthStatusText.Text = $"安装完成，失败 {failed} 个";
-                StatusText.Text = $"安装完成，失败 {failed} 个";
+                ModrinthStatusText.Text = L10n.T("S241", failed);
+                StatusText.Text = L10n.T("S241", failed);
                 Log($"[警告] {project.Title} 安装完成，但 {failed} 个文件失败");
             }
             else
             {
                 Progress.Value = Progress.Maximum;
-                ModrinthStatusText.Text = $"已安装 {project.Title}";
-                StatusText.Text = $"已安装 {project.Title}";
+                ModrinthStatusText.Text = L10n.T("S252", project.Title);
+                StatusText.Text = L10n.T("S252", project.Title);
                 Log($"[mods] 已安装 {project.Title} 到 {modsDir}");
             }
 
@@ -2434,8 +2434,8 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            ModrinthStatusText.Text = "安装失败";
-            StatusText.Text = "安装失败";
+            ModrinthStatusText.Text = L10n.T("S203");
+            StatusText.Text = L10n.T("S203");
             LogError("安装 mod 失败", ex);
         }
         finally
@@ -2466,7 +2466,7 @@ public partial class MainWindow : Window
 
             _launchCts.Cancel();
             LaunchButton.IsEnabled = false;
-            StatusText.Text = "正在取消…";
+            StatusText.Text = L10n.T("S236");
             Log("正在取消启动…");
             return;
         }
@@ -2515,7 +2515,7 @@ public partial class MainWindow : Window
         _launchStartedAt = DateTime.Now;
         LaunchButton.Content = L10n.T("S003");
         LaunchButton.IsEnabled = true;
-        StatusText.Text = "准备中…";
+        StatusText.Text = L10n.T("S238");
         Progress.Value = 0;
         Progress.Maximum = 1;
         try
@@ -2580,7 +2580,7 @@ public partial class MainWindow : Window
 
             if (_gameProcess is null)
             {
-                StatusText.Text = "启动失败";
+                StatusText.Text = L10n.T("S212");
             }
 
             int failureCount = _downloadFailures.Count;
@@ -2596,12 +2596,12 @@ public partial class MainWindow : Window
         catch (OperationCanceledException)
         {
             Log("已取消启动");
-            StatusText.Text = "已取消";
+            StatusText.Text = L10n.T("S228");
             Progress.Value = 0;
         }
         catch (Exception ex)
         {
-            StatusText.Text = "失败";
+            StatusText.Text = L10n.T("S214");
             ShowFailureActions("启动失败", ex);
         }
         finally
@@ -2679,7 +2679,7 @@ public partial class MainWindow : Window
         RepairButton.IsEnabled = false;
         LaunchButton.Content = L10n.T("S003");
         LaunchButton.IsEnabled = true;
-        StatusText.Text = "校验中…";
+        StatusText.Text = L10n.T("S227");
         Progress.Value = 0;
         Progress.Maximum = 1;
 
@@ -2715,24 +2715,24 @@ public partial class MainWindow : Window
             {
                 CopyFailuresButton.IsEnabled = true;
                 CopyFailuresButton.Content = L10n.T("S166", failureCount);
-                StatusText.Text = $"校验完成：仍有 {failureCount} 个文件失败";
+                StatusText.Text = L10n.T("S250", failureCount);
                 Log($"[警告] 校验/修复完成，仍有 {failureCount} 个文件失败");
             }
             else
             {
                 Progress.Value = Progress.Maximum;
-                StatusText.Text = "校验完成：文件完整";
+                StatusText.Text = L10n.T("S226");
                 Log("校验/修复完成：文件完整");
             }
         }
         catch (OperationCanceledException)
         {
-            StatusText.Text = "已取消";
+            StatusText.Text = L10n.T("S228");
             Log("已取消校验/修复");
         }
         catch (Exception ex)
         {
-            StatusText.Text = "校验失败";
+            StatusText.Text = L10n.T("S225");
             ShowFailureActions("校验/修复失败", ex);
         }
         finally
@@ -2780,7 +2780,7 @@ public partial class MainWindow : Window
 
         LaunchButton.IsEnabled = false;
         LaunchButton.Content = L10n.T("S165");
-        StatusText.Text = $"游戏运行中（PID {process.Id}）";
+        StatusText.Text = L10n.T("S259", process.Id);
         Log($"已启动 java（PID {process.Id}）");
     }
 

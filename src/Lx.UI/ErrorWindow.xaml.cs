@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Windows;
 using Lx.Probe.Diagnostics;
+using Lx.Probe.Localization;
 
 namespace Lx.UI;
 
@@ -15,12 +16,26 @@ public partial class ErrorWindow : Window
         InitializeComponent();
         _error = error;
 
-        Title = $"{LxException.KindText(error.Kind)}：{error.Context}";
-        KindText.Text = $"{LxException.KindText(error.Kind)} · {error.Context}";
+        string kind = KindLabel(error.Kind);
+        Title = $"{kind}：{error.Context}";
+        KindText.Text = $"{kind} · {error.Context}";
         MessageText.Text = string.IsNullOrEmpty(extra) ? error.UserMessage : $"{error.UserMessage}\n\n{extra}";
         TraceText.Text = $"trace {error.TraceId}  ·  {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
         DetailBox.Text = error.Detail;
     }
+
+    // 错误类别按当前语言显示；日志里仍用 LxException.KindText（中文）。
+    private static string KindLabel(LxErrorKind kind) => kind switch
+    {
+        LxErrorKind.Cancelled => L10n.T("S271"),
+        LxErrorKind.Timeout => L10n.T("S261"),
+        LxErrorKind.Network => L10n.T("S262"),
+        LxErrorKind.NotFound => L10n.T("S263"),
+        LxErrorKind.Io => L10n.T("S264"),
+        LxErrorKind.InvalidConfig => L10n.T("S265"),
+        LxErrorKind.InvalidState => L10n.T("S266"),
+        _ => L10n.T("S267"),
+    };
 
     private void Copy_Click(object sender, RoutedEventArgs e)
     {

@@ -146,7 +146,7 @@ public partial class App : Application
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         Log.Error("界面线程未处理异常", e.Exception);
-        ShowCrash(e.Exception, "启动器还能继续操作，但状态可能已经不对，建议重启。");
+        ShowCrash(e.Exception, Lx.Probe.Localization.L10n.T("S268"));
         e.Handled = true;
     }
 
@@ -156,7 +156,7 @@ public partial class App : Application
         Log.Error($"未处理异常（进程{(e.IsTerminating ? "即将退出" : "继续运行")}）", exception);
         if (exception is not null)
         {
-            ShowCrash(exception, e.IsTerminating ? "进程即将退出，请重新启动。" : "进程会继续运行。");
+            ShowCrash(exception, e.IsTerminating ? Lx.Probe.Localization.L10n.T("S269") : Lx.Probe.Localization.L10n.T("S270"));
         }
     }
 
