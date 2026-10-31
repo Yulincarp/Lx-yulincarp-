@@ -4,7 +4,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using Lx.Probe.Mods;
 
-namespace Lx.UI.ViewModels;
+namespace Lx.Probe.ViewModels;
 
 // H3：资源页本地 mods 的筛选/排序/增删状态放在 ViewModel，
 // MainWindow 只负责把当前游戏目录交给它。
@@ -69,6 +69,31 @@ public sealed class ResourceViewModel : INotifyPropertyChanged
         if (_gameDir.Length == 0) return;
         ModManager.SetEnabled(_gameDir, mod.FileName, enabled);
         Load(_gameDir);
+    }
+
+    // 拖入/选择文件后统一走这里：重名跳过、非 jar 忽略，返回计数给界面写日志。
+    public ModManager.AddManyResult AddFiles(IEnumerable<string> files)
+    {
+        if (_gameDir.Length == 0)
+        {
+            return new ModManager.AddManyResult(0, 0, 0, new List<string>());
+        }
+
+        ModManager.AddManyResult result = ModManager.AddMany(_gameDir, files);
+        if (result.AnyAdded)
+        {
+            Load(_gameDir);
+        }
+
+        return result;
+    }
+
+    public void Reload()
+    {
+        if (_gameDir.Length > 0)
+        {
+            Load(_gameDir);
+        }
     }
 
     public bool Remove(ModFile mod)

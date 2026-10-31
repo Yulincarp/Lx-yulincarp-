@@ -24,7 +24,7 @@ using Lx.Probe.Resolve;
 using Lx.Probe.Remote;
 using Lx.Probe.Sync;
 using Lx.Probe.Updates;
-using Lx.UI.ViewModels;
+using Lx.Probe.ViewModels;
 using Microsoft.Win32;
 using LxLog = Lx.Probe.Diagnostics.Log;
 
@@ -1948,8 +1948,9 @@ public partial class MainWindow : Window
 
     private void InstallMods(string gameDir, IEnumerable<string> files)
     {
-        Directory.CreateDirectory(ModManager.ModsDir(gameDir));
-        ModManager.AddManyResult result = ModManager.AddMany(gameDir, files);
+        // 安装逻辑在 ViewModel（重名跳过、非 jar 忽略），这里只负责写日志
+        _resourceViewModel.Load(gameDir);
+        ModManager.AddManyResult result = _resourceViewModel.AddFiles(files);
 
         foreach (string message in result.Messages)
         {

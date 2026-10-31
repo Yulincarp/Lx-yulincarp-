@@ -5,7 +5,7 @@ using Lx.Probe.Model;
 using Lx.Probe.Modpacks;
 using Lx.Probe.Resolve;
 
-namespace Lx.UI.ViewModels;
+namespace Lx.Probe.ViewModels;
 
 // H3 第一步：设置摘要从 MainWindow 的字符串拼接移出来。
 // 只负责展示数据，不碰控件。

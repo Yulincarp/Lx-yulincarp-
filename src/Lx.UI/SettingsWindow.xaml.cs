@@ -6,6 +6,7 @@ using Lx.Probe.Launch;
 using Lx.Probe.Model;
 using Lx.Probe.Resolve;
 using Lx.Probe.Updates;
+using Lx.Probe.ViewModels;
 using Microsoft.Win32;
 
 namespace Lx.UI;
@@ -33,6 +34,7 @@ public partial class SettingsWindow : Window
     };
 
     private readonly string _installRoot;
+    private readonly SettingsViewModel _vm;
 
     public SettingsWindow(string installRoot)
     {
@@ -44,13 +46,14 @@ public partial class SettingsWindow : Window
         AboutDataDirText.Text = installRoot;
 
         LaunchSettings settings = SettingsStore.Load(installRoot);
-        MinBox.Text = settings.MinMemoryMb.ToString();
-        MaxBox.Text = settings.MaxMemoryMb.ToString();
-        JvmArgsBox.Text = settings.JvmArgs ?? string.Empty;
-        WindowWidthBox.Text = settings.WindowWidth.ToString();
-        WindowHeightBox.Text = settings.WindowHeight.ToString();
-        FullscreenBox.IsChecked = settings.Fullscreen;
-        ConcurrencyBox.Text = Math.Clamp(settings.DownloadConcurrency, 1, 16).ToString();
+        _vm = SettingsViewModel.From(settings);
+        MinBox.Text = _vm.MinMemoryMb;
+        MaxBox.Text = _vm.MaxMemoryMb;
+        JvmArgsBox.Text = _vm.JvmArgs;
+        WindowWidthBox.Text = _vm.WindowWidth;
+        WindowHeightBox.Text = _vm.WindowHeight;
+        FullscreenBox.IsChecked = _vm.Fullscreen;
+        ConcurrencyBox.Text = _vm.DownloadConcurrency;
 
         var choices = new List<JavaChoice>
         {
@@ -202,81 +205,31 @@ public partial class SettingsWindow : Window
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
-        if (!int.TryParse(MinBox.Text.Trim(), out int min) ||
-            !int.TryParse(MaxBox.Text.Trim(), out int max))
+        // 控件值 -> ViewModel，校验和构造都在 ViewModel 里（可单测）
+        _vm.MinMemoryMb = MinBox.Text;
+        _vm.MaxMemoryMb = MaxBox.Text;
+        _vm.JvmArgs = JvmArgsBox.Text;
+        _vm.WindowWidth = WindowWidthBox.Text;
+        _vm.WindowHeight = WindowHeightBox.Text;
+        _vm.Fullscreen = FullscreenBox.IsChecked == true;
+        _vm.DownloadConcurrency = ConcurrencyBox.Text;
+        _vm.JavaPath = (JavaBox.SelectedItem as JavaChoice)?.Path;
+        _vm.DownloadSource = SelectedSourceKey();
+        _vm.CustomDownloadBase = CustomSourceBox.Text;
+        _vm.ProxyMode = SelectedProxyKey();
+        _vm.ProxyUrl = ProxyUrlBox.Text;
+        _vm.UpdateChannel = (UpdateChannelBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "stable";
+        _vm.DarkTheme = ThemeBox.SelectedIndex == 1;
+
+        if (!_vm.TryBuild(out LaunchSettings? settings, out string error) || settings is null)
         {
-            HintText.Text = "内存要填数字（单位 MB）";
+            HintText.Text = error;
             return;
         }
 
-        if (min < LaunchSettings.MinAllowedMb || max > LaunchSettings.MaxAllowedMb || min > max)
-        {
-            HintText.Text = $"内存范围不对：最小 {LaunchSettings.MinAllowedMb}，最大 {LaunchSettings.MaxAllowedMb}，且最小不能大于最大";
-            return;
-        }
-
-        if (!int.TryParse(WindowWidthBox.Text.Trim(), out int width) ||
-            !int.TryParse(WindowHeightBox.Text.Trim(), out int height) ||
-            width < LaunchSettings.MinWindowWidth || height < LaunchSettings.MinWindowHeight ||
-            width > LaunchSettings.MaxWindowSize || height > LaunchSettings.MaxWindowSize)
-        {
-            HintText.Text = $"窗口大小不对：宽 ≥ {LaunchSettings.MinWindowWidth}，高 ≥ {LaunchSettings.MinWindowHeight}，最大 {LaunchSettings.MaxWindowSize}";
-            return;
-        }
-
-        if (!int.TryParse(ConcurrencyBox.Text.Trim(), out int concurrency) || concurrency < 1 || concurrency > 16)
-        {
-            HintText.Text = "并发数要填 1 ~ 16";
-            return;
-        }
-
-        string sourceKey = SelectedSourceKey();
-        string? customBase = null;
-        if (sourceKey == DownloadSourceSettings.Custom)
-        {
-            customBase = DownloadUrlRewriter.NormalizeBase(CustomSourceBox.Text);
-            if (customBase.Length == 0)
-            {
-                HintText.Text = "自定义下载源要填 http/https 开头的地址";
-                return;
-            }
-        }
-
-        string proxyMode = SelectedProxyKey();
-        string? proxyUrl = null;
-        if (proxyMode == "manual")
-        {
-            proxyUrl = ProxyUrlBox.Text.Trim();
-            if (!Uri.TryCreate(proxyUrl, UriKind.Absolute, out Uri? proxyUri) ||
-                (proxyUri.Scheme != Uri.UriSchemeHttp && proxyUri.Scheme != Uri.UriSchemeHttps))
-            {
-                HintText.Text = "手动代理要填 http:// 或 https:// 地址";
-                return;
-            }
-        }
-
-        JavaChoice? java = JavaBox.SelectedItem as JavaChoice;
-        string channel = (UpdateChannelBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "stable";
-        string theme = ThemeBox.SelectedIndex == 1 ? "dark" : "light";
-
-        SettingsStore.Save(_installRoot, new LaunchSettings(
-            MinMemoryMb: min,
-            MaxMemoryMb: max,
-            JavaPath: java?.Path,
-            DownloadSource: sourceKey,
-            CustomDownloadBase: customBase,
-            JvmArgs: string.IsNullOrWhiteSpace(JvmArgsBox.Text) ? null : JvmArgsBox.Text.Trim(),
-            WindowWidth: width,
-            WindowHeight: height,
-            Fullscreen: FullscreenBox.IsChecked == true,
-            DownloadConcurrency: concurrency,
-            ProxyMode: proxyMode,
-            ProxyUrl: proxyUrl,
-            UpdateChannel: channel,
-            Theme: theme));
-
-        Downloader.ConfigureProxy(proxyMode, proxyUrl);
-        ThemeManager.Apply(theme);
+        SettingsStore.Save(_installRoot, settings);
+        Downloader.ConfigureProxy(settings.ProxyMode, settings.ProxyUrl);
+        ThemeManager.Apply(settings.Theme);
         DialogResult = true;
         Close();
     }
