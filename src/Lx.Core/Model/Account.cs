@@ -11,6 +11,11 @@ public sealed record Account(
     List<AccountRole>? AvailableRoles = null,
     string? RefreshToken = null,
     DateTimeOffset? ExpiresAt = null,
-    string? ClientId = null);
+    string? ClientId = null)
+{
+    // 默认 ToString 会把 AccessToken 一起打出来；UI 自动化树、日志、剪贴板都可能拿到它。
+    // 统一只暴露名字和类型，token 不进入任何字符串。
+    public override string ToString() => $"{Name}（{Type}）";
+}
 
 public sealed record AccountRole(string Id, string Name);

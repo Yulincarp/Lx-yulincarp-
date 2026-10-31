@@ -10,6 +10,7 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Lx.Probe;
 using Lx.Probe.Auth;
 using Lx.Probe.Diagnostics;
@@ -22,6 +23,7 @@ using Lx.Probe.Modpacks;
 using Lx.Probe.Mods;
 using Lx.Probe.Resolve;
 using Lx.Probe.Remote;
+using Lx.Probe.Skins;
 using Lx.Probe.Sync;
 using Lx.Probe.Updates;
 using Lx.Probe.ViewModels;
@@ -163,6 +165,107 @@ public partial class MainWindow : Window
         if (accounts.Count > 0)
         {
             AccountBox.SelectedIndex = 0;
+        }
+
+        RefreshAccountInfo();
+    }
+
+    private void AccountBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => RefreshAccountInfo();
+
+    // 账号页信息完整化：类型 / 站点 / UUID / 会话有效期 / 角色，外加头像。
+    private void RefreshAccountInfo()
+    {
+        if (AccountDetailText is null)
+        {
+            return;
+        }
+
+        if (AccountBox?.SelectedItem is not Account account)
+        {
+            AccountDetailText.Text = "还没有账号：先输入离线名点「添加」，或直接用「正版登录」。";
+            AvatarLetter.Text = "?";
+            AvatarLetter.Visibility = Visibility.Visible;
+            AccountAvatar.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        string type = account.Type switch
+        {
+            "microsoft" => "微软正版",
+            "yggdrasil" => "外置登录",
+            _ => "离线",
+        };
+
+        var builder = new StringBuilder();
+        builder.Append($"类型：{type}");
+        if (account.ApiRoot is { Length: > 0 } api && Uri.TryCreate(api, UriKind.Absolute, out Uri? apiUri))
+        {
+            builder.Append($"（{apiUri.Host}）");
+        }
+
+        builder.AppendLine();
+        builder.AppendLine($"UUID：{account.Uuid}");
+        builder.Append($"会话：{DescribeSession(account)}");
+        if (account.AvailableRoles is { Count: > 0 } roles)
+        {
+            builder.Append($"　角色：{string.Join("、", roles.Select(role => role.Name))}");
+        }
+
+        AccountDetailText.Text = builder.ToString();
+
+        AvatarLetter.Text = account.Name.Length > 0 ? account.Name[..1].ToUpperInvariant() : "?";
+        AvatarLetter.Visibility = Visibility.Visible;
+        AccountAvatar.Visibility = Visibility.Collapsed;
+        LoadAvatar(account);
+    }
+
+    private static string DescribeSession(Account account)
+    {
+        if (account.Type == "offline")
+        {
+            return "本地离线账号，不会过期";
+        }
+
+        if (account.ExpiresAt is not { } expires)
+        {
+            return "有效期未知";
+        }
+
+        DateTimeOffset local = expires.ToLocalTime();
+        TimeSpan remaining = expires - DateTimeOffset.Now;
+        return remaining <= TimeSpan.Zero
+            ? $"已过期（{local:yyyy-MM-dd HH:mm}），需要重新登录"
+            : $"有效期至 {local:yyyy-MM-dd HH:mm}（还剩 {Math.Max(0, (int)remaining.TotalDays)} 天）";
+    }
+
+    private async void LoadAvatar(Account account)
+    {
+        try
+        {
+            string? path = SkinService.CachedSkinPath(_installRoot, account.Uuid);
+            if (path is null && account.Type != "offline")
+            {
+                path = await SkinService.GetSkinAsync(_installRoot, account.Uuid, account.ApiRoot);
+            }
+
+            if (path is null || !ReferenceEquals(AccountBox?.SelectedItem, account))
+            {
+                return;
+            }
+
+            BitmapSource? head = SkinRenderer.Head(path);
+            if (head is null)
+            {
+                return;
+            }
+
+            AccountAvatar.Source = head;
+            AccountAvatar.Visibility = Visibility.Visible;
+            AvatarLetter.Visibility = Visibility.Collapsed;
+        }
+        catch (Exception ex) when (ex is IOException or NotSupportedException or ArgumentException)
+        {
+            Log($"读取皮肤失败：{ex.Message}");
         }
     }
 

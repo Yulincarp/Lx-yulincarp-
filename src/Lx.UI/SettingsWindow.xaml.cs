@@ -91,7 +91,10 @@ public partial class SettingsWindow : Window
             .OfType<ComboBoxItem>()
             .FirstOrDefault(item => string.Equals(item.Tag as string, channel, StringComparison.OrdinalIgnoreCase))
             ?? UpdateChannelBox.Items[0];
-        ThemeBox.SelectedIndex = string.Equals(settings.Theme, "dark", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+        ThemeBox.SelectedItem = ThemeBox.Items
+            .OfType<ComboBoxItem>()
+            .FirstOrDefault(item => string.Equals(item.Tag as string, _vm.Theme, StringComparison.OrdinalIgnoreCase))
+            ?? ThemeBox.Items[0];
     }
 
     private string SelectedSourceKey() =>
@@ -221,7 +224,7 @@ public partial class SettingsWindow : Window
         _vm.ProxyMode = SelectedProxyKey();
         _vm.ProxyUrl = ProxyUrlBox.Text;
         _vm.UpdateChannel = (UpdateChannelBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "stable";
-        _vm.DarkTheme = ThemeBox.SelectedIndex == 1;
+        _vm.Theme = (ThemeBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "light";
         _vm.TelemetryEnabled = TelemetryBox.IsChecked == true;
         _vm.CrashReportUrl = CrashUrlBox.Text;
 

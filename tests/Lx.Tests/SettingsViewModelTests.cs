@@ -34,7 +34,7 @@ public class SettingsViewModelTests
         Assert.True(vm.Fullscreen);
         Assert.Equal("manual", vm.ProxyMode);
         Assert.Equal("beta", vm.UpdateChannel);
-        Assert.True(vm.DarkTheme);
+        Assert.Equal("dark", vm.Theme);
 
         Assert.True(vm.TryBuild(out LaunchSettings? rebuilt, out string error));
         Assert.Equal(string.Empty, error);

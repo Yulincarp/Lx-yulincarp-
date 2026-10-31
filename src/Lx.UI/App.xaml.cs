@@ -47,6 +47,15 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
+        // 主题选了"跟随系统"时，系统切换深浅色要立刻生效
+        Microsoft.Win32.SystemEvents.UserPreferenceChanged += (_, _) =>
+        {
+            if (ThemeManager.Mode == Lx.Probe.Model.ThemeChoice.System)
+            {
+                Dispatcher.BeginInvoke(new Action(() => ThemeManager.Apply(ThemeManager.Mode)));
+            }
+        };
+
         _activationThread = new Thread(ActivationLoop)
         {
             IsBackground = true,

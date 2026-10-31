@@ -33,7 +33,8 @@ public sealed class SettingsViewModel
 
     public string UpdateChannel { get; set; } = "stable";
 
-    public bool DarkTheme { get; set; }
+    // 主题模式：light / dark / system（跟随系统）
+    public string Theme { get; set; } = ThemeChoice.Light;
 
     // 崩溃上报：默认关闭；地址可以留空（只存本地 logs\crash\）
     public bool TelemetryEnabled { get; set; }
@@ -55,7 +56,7 @@ public sealed class SettingsViewModel
         ProxyMode = settings.ProxyMode ?? "system",
         ProxyUrl = settings.ProxyUrl ?? string.Empty,
         UpdateChannel = settings.UpdateChannel ?? "stable",
-        DarkTheme = string.Equals(settings.Theme, "dark", StringComparison.OrdinalIgnoreCase),
+        Theme = ThemeChoice.Normalize(settings.Theme),
         TelemetryEnabled = settings.TelemetryEnabled,
         CrashReportUrl = settings.CrashReportUrl ?? string.Empty,
     };
@@ -143,7 +144,7 @@ public sealed class SettingsViewModel
             ProxyMode: proxyMode,
             ProxyUrl: proxyUrl,
             UpdateChannel: UpdateChannel,
-            Theme: DarkTheme ? "dark" : "light",
+            Theme: ThemeChoice.Normalize(Theme),
             TelemetryEnabled: TelemetryEnabled,
             CrashReportUrl: crashUrl.Length == 0 ? null : crashUrl);
 

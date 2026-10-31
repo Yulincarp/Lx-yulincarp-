@@ -328,7 +328,8 @@
                             <WrapPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,16,8">
                                     <TextBlock Text="账号" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <ComboBox x:Name="AccountBox" Width="170" VerticalAlignment="Center" DisplayMemberPath="Name"/>
+                                    <ComboBox x:Name="AccountBox" Width="170" VerticalAlignment="Center" DisplayMemberPath="Name"
+                                              SelectionChanged="AccountBox_SelectionChanged"/>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,16,8">
                                     <TextBlock Text="离线名" VerticalAlignment="Center" Margin="0,0,6,0"/>
@@ -342,6 +343,25 @@
                                 </StackPanel>
                             </WrapPanel>
                             <TextBlock Text="正版登录使用微软 device code；外置登录使用 LittleSkin 等 Yggdrasil 站点。" Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+
+                            <Grid Margin="0,14,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Width="64" Height="64" CornerRadius="6" Margin="0,0,14,0" VerticalAlignment="Top"
+                                        Background="{DynamicResource PanelBackground}"
+                                        BorderBrush="{DynamicResource TextSecondary}" BorderThickness="1">
+                                    <Grid>
+                                        <TextBlock x:Name="AvatarLetter" FontSize="26" FontWeight="Bold"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <Image x:Name="AccountAvatar" Width="56" Height="56" Stretch="Fill"
+                                               RenderOptions.BitmapScalingMode="NearestNeighbor" Visibility="Collapsed"/>
+                                    </Grid>
+                                </Border>
+                                <TextBlock x:Name="AccountDetailText" Grid.Column="1" TextWrapping="Wrap" FontSize="12"
+                                           VerticalAlignment="Top"/>
+                            </Grid>
                         </StackPanel>
                     </Border>
                 </Grid>
