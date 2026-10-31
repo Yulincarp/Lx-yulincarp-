@@ -12,6 +12,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Lx.Probe;
 using Lx.Probe.Auth;
+using Lx.Probe.Diagnostics;
 using Lx.Probe.Instances;
 using Lx.Probe.Loaders;
 using Lx.Probe.Launch;
@@ -858,9 +859,9 @@ public partial class MainWindow : Window
             RefreshInstances(imported.Instance.Name);
             Log($"整合包导入完成：{imported.Instance.Name}（{imported.Files.Count} 个文件）");
         }
-        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or LxException)
         {
-            LogError("导入整合包失败", ex);
+            ShowError("导入整合包失败", ex);
         }
     }
 
@@ -939,9 +940,9 @@ public partial class MainWindow : Window
             PackSyncUrlBox.Text = result.ManifestPath;
             Log($"把整个目录传到静态托管（Nginx / 对象存储 / GitHub Pages），客户端填 <基地址>/pack.json");
         }
-        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or LxException)
         {
-            LogError("导出整合包失败", ex);
+            ShowError("导出整合包失败", ex);
             SyncStatusText.Text = "导出失败，详情见日志";
         }
     }
@@ -1028,9 +1029,9 @@ public partial class MainWindow : Window
         {
             SyncStatusText.Text = "同步已取消";
         }
-        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or HttpRequestException)
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or HttpRequestException or LxException)
         {
-            LogError("同步整合包失败", ex);
+            ShowError("同步整合包失败", ex);
             SyncStatusText.Text = "同步失败，详情见日志";
         }
         finally
@@ -2418,9 +2419,8 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            LogError("启动失败", ex);
             StatusText.Text = "失败";
-            ShowFailureActions(ex);
+            ShowFailureActions("启动失败", ex);
         }
         finally
         {
@@ -2550,9 +2550,8 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            LogError("校验/修复失败", ex);
             StatusText.Text = "校验失败";
-            ShowFailureActions(ex);
+            ShowFailureActions("校验/修复失败", ex);
         }
         finally
         {
@@ -2719,46 +2718,24 @@ public partial class MainWindow : Window
 
     private void OpenLogs_Click(object sender, RoutedEventArgs e) => OpenLogFolder();
 
-    private void ShowFailureActions(Exception exception)
+    private void ShowFailureActions(string context, Exception exception)
     {
+        LxException error = LxException.From(exception, context);
         int count = _downloadFailures.Count;
-        if (count == 0)
+        if (count > 0)
         {
-            MessageBoxResult open = MessageBox.Show(
-                $"启动失败：{exception.Message}{Environment.NewLine}{Environment.NewLine}是否打开日志目录？",
-                "启动失败",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Error);
-
-            if (open == MessageBoxResult.Yes)
-            {
-                OpenLogFolder();
-            }
-
-            return;
+            CopyFailuresButton.IsEnabled = true;
+            CopyFailuresButton.Content = $"复制失败清单 ({count})";
         }
 
-        CopyFailuresButton.IsEnabled = true;
-        CopyFailuresButton.Content = $"复制失败清单 ({count})";
+        LxLog.Error($"{context}（trace {error.TraceId}）", error);
+        AppendToLogBox($"[错误] {context}：{error.UserMessage}（trace {error.TraceId}）");
 
-        MessageBoxResult choice = MessageBox.Show(
-            $"启动失败：{exception.Message}{Environment.NewLine}{Environment.NewLine}" +
-            $"本次有 {count} 个文件下载失败。{Environment.NewLine}{Environment.NewLine}" +
-            "是：复制失败清单" + Environment.NewLine +
-            "否：打开日志目录" + Environment.NewLine +
-            "取消：关闭",
-            "启动失败",
-            MessageBoxButton.YesNoCancel,
-            MessageBoxImage.Error);
+        string extra = count > 0
+            ? $"本次有 {count} 个文件下载失败，可点底部「复制失败清单 ({count})」导出清单。"
+            : string.Empty;
 
-        if (choice == MessageBoxResult.Yes)
-        {
-            CopyFailuresToClipboard();
-        }
-        else if (choice == MessageBoxResult.No)
-        {
-            OpenLogFolder();
-        }
+        new ErrorWindow(error, extra) { Owner = this }.ShowDialog();
     }
 
     private void CopyFailuresToClipboard()
@@ -2812,10 +2789,21 @@ public partial class MainWindow : Window
     }
 
     // 异常要把堆栈写进文件，否则远程排错只剩一句"出错了"。
+    // 所有异常先过 LxException：日志里带 trace id，界面拿到同一句人话。
     private void LogError(string context, Exception exception)
     {
-        LxLog.Error(context, exception);
-        AppendToLogBox($"[错误] {context}：{exception.Message}");
+        LxException error = LxException.From(exception, context);
+        LxLog.Error($"{context}（trace {error.TraceId}）", error);
+        AppendToLogBox($"[错误] {context}：{error.UserMessage}（trace {error.TraceId}）");
+    }
+
+    // 需要弹卡片的错误：同一个 LxException 既进日志也进窗口，trace id 一致。
+    private void ShowError(string context, Exception exception, string? extra = null)
+    {
+        LxException error = LxException.From(exception, context);
+        LxLog.Error($"{context}（trace {error.TraceId}）", error);
+        AppendToLogBox($"[错误] {context}：{error.UserMessage}（trace {error.TraceId}）");
+        new ErrorWindow(error, extra) { Owner = this }.ShowDialog();
     }
 
     private void AppendToLogBox(string message)

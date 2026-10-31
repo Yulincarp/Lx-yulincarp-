@@ -70,15 +70,18 @@ public static class PackSync
                 string reason = ex.StatusCode == System.Net.HttpStatusCode.NotFound
                     ? "服务器上没有这个 pack.json（404），检查地址是不是指到了清单文件"
                     : $"HTTP {(int)ex.StatusCode.Value}";
-                throw new InvalidOperationException($"读取清单失败：{reason}", ex);
+                throw new Diagnostics.LxException(
+                    Diagnostics.LxErrorKind.NotFound, "读取清单", reason, inner: ex);
             }
             catch (HttpRequestException ex)
             {
-                throw new InvalidOperationException($"读取清单失败：连不上 {target}（{ex.Message}）", ex);
+                throw new Diagnostics.LxException(
+                    Diagnostics.LxErrorKind.Network, "读取清单", $"连不上 {target}（{ex.Message}）", inner: ex);
             }
             catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
             {
-                throw new InvalidOperationException("读取清单超时（120 秒），检查网络或换个托管地址", ex);
+                throw new Diagnostics.LxException(
+                    Diagnostics.LxErrorKind.Timeout, "读取清单", "读取清单超时（120 秒），检查网络或换个托管地址", inner: ex);
             }
 
             return PackManifest.Parse(json);
