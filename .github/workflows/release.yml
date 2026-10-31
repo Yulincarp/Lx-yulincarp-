@@ -4,34 +4,83 @@ on:
   push:
     tags:
       - "v*"
+  # 允许手动重跑：填一个已存在的 tag，就会重新构建并覆盖同名资产
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要重新发布的 tag（例如 v1.4.2）"
+        required: true
+        type: string
 
 permissions:
   contents: write
+
+# 同一个 tag 不并发跑，避免两个 workflow 同时往一个 Release 上传
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   release:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
+
+      # release.ps1 里已经做了：tag 与 Directory.Build.props 版本一致性校验、测试、打包、生成 update.json
       - name: Build release package
         shell: pwsh
-        run: ./release.ps1 -Repo "${{ github.repository }}" -Notes "Lx Launcher ${{ github.ref_name }}"
+        run: |
+          ./release.ps1 `
+            -Repo "${{ github.repository }}" `
+            -Tag "${{ inputs.tag || github.ref_name }}" `
+            -Notes "Lx Launcher ${{ inputs.tag || github.ref_name }}"
+
+      - name: Verify artifacts
+        shell: pwsh
+        run: |
+          $files = @(
+            (Get-ChildItem dist/Lx-*-win-x64.zip -ErrorAction SilentlyContinue),
+            (Get-ChildItem dist/Lx-*-Setup.exe -ErrorAction SilentlyContinue),
+            (Get-ChildItem dist/update*.json -ErrorAction SilentlyContinue),
+            (Get-Item dist/sha256.txt -ErrorAction SilentlyContinue)
+          ) | Where-Object { $_ }
+          if ($files.Count -lt 4) {
+            throw "发布产物不完整：找到 $($files.Count) 个（期望 zip / Setup / update.json / sha256.txt）"
+          }
+          Get-Content dist/sha256.txt
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Lx-${{ github.ref_name }}
+          name: Lx-${{ inputs.tag || github.ref_name }}
+          if-no-files-found: error
           path: |
             dist/Lx-*-win-x64.zip
             dist/Lx-*-Setup.exe
+            dist/Lx-*-remote-*.apk
             dist/update*.json
+            dist/sha256.txt
+
+      # overwrite_files 默认 true：重跑时同名资产直接替换，不会因为"已存在"失败
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: ${{ inputs.tag || github.ref_name }}
+          fail_on_unmatched_files: false
+          overwrite_files: true
+          generate_release_notes: true
           files: |
             dist/Lx-*-win-x64.zip
             dist/Lx-*-Setup.exe
+            dist/Lx-*-remote-*.apk
             dist/update*.json
-          generate_release_notes: true
+            dist/sha256.txt

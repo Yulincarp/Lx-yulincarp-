@@ -1,6 +1,8 @@
 ﻿param(
     [string]$Repo = $env:GITHUB_REPOSITORY,
     [string]$Notes = "",
+    # 触发本次发布的 tag；CI 里由 workflow 传进来，本地留空表示不校验
+    [string]$Tag = $env:GITHUB_REF_NAME,
     # update.json 的 minVersion；留空则用当前版本号
     [string]$MinVersion = "",
     [ValidateSet("stable", "beta")]
@@ -19,8 +21,8 @@ if ([string]::IsNullOrWhiteSpace($version)) {
     throw "Directory.Build.props is missing Version"
 }
 
-if ($env:GITHUB_REF_NAME -and $env:GITHUB_REF_NAME -ne "v$version") {
-    throw "Tag $env:GITHUB_REF_NAME does not match project version v$version"
+if ($Tag -and $Tag -ne "v$version") {
+    throw "Tag $Tag does not match project version v$version"
 }
 
 if (-not $SkipTests) {
@@ -97,3 +99,23 @@ Write-Host "ZIP: $zip"
 Write-Host "SETUP: $setup"
 Write-Host "SHA256: $hash"
 Write-Host "Manifest: $manifestPath"
+
+# 发布页附一份校验清单：玩家下完可以直接 certutil/Get-FileHash 对一下。
+# 包含 zip、Setup、update.json，以及本地构建过的 APK（CI 不构建 APK，没有就跳过）。
+$checksumFiles = @($zip, $setup, $manifestPath)
+$apk = Get-ChildItem (Join-Path $root "dist") -Filter "$slug-remote-$version.apk" -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+if ($apk) {
+    $checksumFiles += $apk.FullName
+}
+
+$lines = foreach ($file in $checksumFiles) {
+    if (Test-Path -LiteralPath $file) {
+        $fileHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLowerInvariant()
+        "{0}  {1}" -f $fileHash, (Split-Path $file -Leaf)
+    }
+}
+
+$checksumPath = Join-Path $root "dist\sha256.txt"
+[System.IO.File]::WriteAllText($checksumPath, (($lines -join "`n") + "`n"), [System.Text.UTF8Encoding]::new($false))
+Write-Host "Checksums: $checksumPath"
