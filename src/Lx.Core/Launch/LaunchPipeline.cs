@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Lx.Probe.Auth;
+using Lx.Probe.Cache;
 using Lx.Probe.Model;
 using Lx.Probe.Resolve;
 
@@ -47,6 +48,10 @@ public static class LaunchPipeline
     {
         string installRoot = options.InstallRoot;
         Account account = options.Account;
+
+        // 文件 sha1 缓存：热启动时按「大小 + mtime」直接命中，不再重算 3000+ 个文件。
+        FileHashCache hashCache = FileHashCache.Load(installRoot);
+        var verifyWatch = System.Diagnostics.Stopwatch.StartNew();
 
         if (MicrosoftAuth.NeedsRefresh(account))
         {
@@ -179,7 +184,8 @@ public static class LaunchPipeline
             downloadConcurrency,
             (done, total) => progress?.Report(new LaunchProgress("游戏文件", done, total)),
             ReportFailure,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            hashCache).ConfigureAwait(false);
         log($"游戏文件下载完成，失败 {failed} 个");
 
         string assetsDir = Path.Combine(installRoot, "assets");
@@ -192,8 +198,13 @@ public static class LaunchPipeline
             downloadConcurrency,
             (done, total) => progress?.Report(new LaunchProgress("assets", done, total)),
             ReportFailure,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            hashCache).ConfigureAwait(false);
         log($"assets 下载完成，失败 {failedAssets} 个");
+
+        verifyWatch.Stop();
+        log($"文件校验：命中缓存 {hashCache.Hits}，重算 {hashCache.Misses}，耗时 {verifyWatch.ElapsedMilliseconds} ms");
+        hashCache.Save();
 
         var allFiles = new List<DownloadItem>(manifestItems);
         allFiles.AddRange(assets);

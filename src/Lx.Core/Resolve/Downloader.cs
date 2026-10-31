@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Lx.Probe.Cache;
 using Lx.Probe.Net;
 
 namespace Lx.Probe.Resolve;
@@ -22,7 +23,8 @@ public static class Downloader
         int concurrency = 8,
         Action<int, int>? onProgress = null,
         Action<DownloadFailure>? onFailure = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        FileHashCache? hashCache = null)
     {
         int ok = 0;
         int skipped = 0;
@@ -40,8 +42,9 @@ public static class Downloader
             {
                 string dest = Path.Combine(installRoot, item.RelativePath.Replace('/', Path.DirectorySeparatorChar));
 
+                // 有缓存就按「大小 + mtime」判断，命中时不读文件内容（启动快的关键）。
                 if (File.Exists(dest) &&
-                    string.Equals(Hasher.Sha1Of(dest), item.Sha1, StringComparison.OrdinalIgnoreCase))
+                    string.Equals(hashCache?.Sha1Of(dest) ?? Hasher.Sha1Of(dest), item.Sha1, StringComparison.OrdinalIgnoreCase))
                 {
                     Interlocked.Increment(ref skipped);
                     return;
@@ -49,7 +52,7 @@ public static class Downloader
 
                 Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
 
-                DownloadFailure? failure = await TryDownloadAsync(item, item.Url, dest, cancellationToken).ConfigureAwait(false);
+                DownloadFailure? failure = await TryDownloadAsync(item, item.Url, dest, cancellationToken, hashCache).ConfigureAwait(false);
 
                 // 镜像失败（403/404/超时）就回退到官方源再试一次，成功就不算失败。
                 if (failure is not null &&
@@ -58,7 +61,7 @@ public static class Downloader
                     !cancellationToken.IsCancellationRequested)
                 {
                     Console.WriteLine($"[回退] {item.RelativePath} → 官方源");
-                    DownloadFailure? fallbackFailure = await TryDownloadAsync(item, fallback, dest, cancellationToken).ConfigureAwait(false);
+                    DownloadFailure? fallbackFailure = await TryDownloadAsync(item, fallback, dest, cancellationToken, hashCache).ConfigureAwait(false);
                     if (fallbackFailure is null)
                     {
                         Interlocked.Increment(ref ok);
@@ -136,7 +139,8 @@ public static class Downloader
         DownloadItem item,
         string url,
         string dest,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        FileHashCache? hashCache = null)
     {
         string temp = dest + ".part";
         string meta = temp + ".meta";
@@ -161,6 +165,7 @@ public static class Downloader
                         string.Equals(Hasher.Sha1Of(temp), item.Sha1, StringComparison.OrdinalIgnoreCase))
                     {
                         File.Move(temp, dest, overwrite: true);
+                        hashCache?.Remember(dest, item.Sha1);
                         TryDelete(meta);
                         return null;
                     }
@@ -256,6 +261,11 @@ public static class Downloader
                 }
 
                 File.Move(temp, dest, overwrite: true);
+                if (expectedSha1.Length > 0)
+                {
+                    hashCache?.Remember(dest, expectedSha1);
+                }
+
                 TryDelete(meta);
                 return null;
             }
