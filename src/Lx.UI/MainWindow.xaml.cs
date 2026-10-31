@@ -1405,12 +1405,18 @@ public partial class MainWindow : Window
         List<ManifestVersion> matches = _versionView.Cast<ManifestVersion>().ToList();
         if (matches.Count == 0)
         {
+            // 没有匹配：保留原来的选择，别把版本框清空
             return;
         }
 
-        if (matches.Count == 1)
+        // 过滤会把选中项筛掉，ComboBox 就变空了。这里补选一个：
+        // 有完全同名的优先（输入 26.2 就选 26.2，而不是 fabric-loader-...-26.2），否则取第一个。
+        bool keepSelection = VersionBox.SelectedItem is ManifestVersion current && matches.Contains(current);
+        if (!keepSelection)
         {
-            VersionBox.SelectedItem = matches[0];
+            ManifestVersion pick = matches.FirstOrDefault(m =>
+                string.Equals(m.Id, _versionFilter, StringComparison.OrdinalIgnoreCase)) ?? matches[0];
+            VersionBox.SelectedItem = pick;
         }
 
         VersionBox.IsDropDownOpen = true;
