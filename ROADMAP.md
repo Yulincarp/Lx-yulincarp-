@@ -414,7 +414,7 @@ Linux/macOS 不是"编译一下"：WPF 不支持，要换 Avalonia 重写 UI，�
 | Step | 做什么 | 预估 | 验收 |
 |---|---|---|---|
 | m10-7 | 统一错误模型（`LxException` + trace id）✅；`CancellationToken` 收口未做 | 1d | 取消 / 超时 / 网络失败显示同一套错误卡片，日志可追 trace id |
-| m10-8 | 结构化日志（JSON 行）+ token 脱敏；清 nullable 警告并开 `TreatWarningsAsErrors` | 1d | 0 warning；日志里无明文 token |
+| m10-8 | 结构化日志（`launcher-*.jsonl`）+ token 脱敏；`TreatWarningsAsErrors` ✅ | 1d | 构建 0 warning（顺手把 SharpCompress 0.38→0.50.7 修掉 NU1902）；日志里无明文 token |
 | m10-9 | 状态缓存：`cache/hashes.json` 记 路径 → sha1 / 大小 / mtime ✅ | 1.5d | 热启动校验 < 500 ms：实测 3863 个文件 3119 ms → **266 ms**（缓存命中 3863 / 重算 0） |
 | m10-10 | 设置页 / 资源页 ViewModel 收尾，code-behind 只留窗口生命周期 | 1.5d | 两页无业务逻辑在 code-behind，ViewModel 有单测 |
 

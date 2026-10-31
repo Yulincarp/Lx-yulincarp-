@@ -5,4 +5,11 @@
     <FileVersion>1.4.2.0</FileVersion>
     <InformationalVersion>1.4.2</InformationalVersion>
   </PropertyGroup>
+
+  <!-- 警告当错误：nullable / 未使用变量这类问题在 PR 里就会被拦下来。
+       NU1900 除外：离线环境拿不到 NuGet 漏洞数据，不应该让构建失败。 -->
+  <PropertyGroup>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>NU1900;NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
+  </PropertyGroup>
 </Project>

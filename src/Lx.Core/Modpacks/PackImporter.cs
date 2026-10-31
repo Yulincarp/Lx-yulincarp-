@@ -20,7 +20,7 @@ public static class PackImporter
 {
     public static PackKind DetectKind(string path)
     {
-        using IArchive archive = ArchiveFactory.Open(path);
+        using IArchive archive = ArchiveFactory.OpenArchive(path);
         List<string> keys = archive.Entries
             .Where(entry => !entry.IsDirectory)
             .Select(entry => KeyOf(entry).Replace('\\', '/'))
@@ -117,7 +117,7 @@ public static class PackImporter
         string instanceDir;
         List<string> overrides;
 
-        using (IArchive archive = ArchiveFactory.Open(path))
+        using (IArchive archive = ArchiveFactory.OpenArchive(path))
         {
             List<IArchiveEntry> entries = archive.Entries.Where(entry => !entry.IsDirectory).ToList();
 
@@ -243,7 +243,7 @@ public static class PackImporter
 
     private static async Task<PackImportResult> ImportGenericAsync(string path, string installRoot, Action<string> log)
     {
-        using IArchive archive = ArchiveFactory.Open(path);
+        using IArchive archive = ArchiveFactory.OpenArchive(path);
         List<IArchiveEntry> entries = archive.Entries
             .Where(entry => !entry.IsDirectory && !IsJunk(KeyOf(entry)))
             .ToList();

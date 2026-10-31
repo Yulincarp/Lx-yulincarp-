@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 
 namespace Lx.Probe.Diagnostics;
 
@@ -13,8 +14,14 @@ public static class Log
     private static readonly object Gate = new();
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
     private static string _directory = Path.Combine(Path.GetTempPath(), AppInfo.DataDirectoryName, "logs");
     private static string? _currentFile;
+    private static string? _currentJsonFile;
 
     public static string DirectoryPath => _directory;
 
@@ -25,6 +32,18 @@ public static class Log
             lock (Gate)
             {
                 return _currentFile;
+            }
+        }
+    }
+
+    // 结构化日志文件（JSON Lines），和文本日志同目录、同名不同后缀。
+    public static string? CurrentJsonFile
+    {
+        get
+        {
+            lock (Gate)
+            {
+                return _currentJsonFile;
             }
         }
     }
@@ -90,23 +109,34 @@ public static class Log
 
     public static void Write(string level, string message, Exception? exception)
     {
-        string line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{level}] {message}";
+        DateTime now = DateTime.Now;
+        string safeMessage = LogRedactor.Redact(message);
+        string? safeDetail = exception is null ? null : LogRedactor.Redact(exception.ToString());
+        string line = $"[{now:yyyy-MM-dd HH:mm:ss.fff}] [{level}] {safeMessage}";
+
         lock (Gate)
         {
             try
             {
                 Directory.CreateDirectory(_directory);
-                string path = FileFor(DateTime.Now);
+
+                string path = FileFor(now);
                 RotateIfTooLarge(path);
 
                 var builder = new StringBuilder(line).Append(Environment.NewLine);
-                if (exception is not null)
+                if (safeDetail is not null)
                 {
-                    builder.Append(exception).Append(Environment.NewLine);
+                    builder.Append(safeDetail).Append(Environment.NewLine);
                 }
 
                 File.AppendAllText(path, builder.ToString(), Utf8);
                 _currentFile = path;
+
+                // 结构化副本：一行一个 JSON，方便 jq/grep；文本日志保持原样给人看
+                string jsonPath = JsonFileFor(now);
+                RotateIfTooLarge(jsonPath);
+                File.AppendAllText(jsonPath, FormatJsonLine(level, safeMessage, exception, now) + Environment.NewLine, Utf8);
+                _currentJsonFile = jsonPath;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -116,8 +146,38 @@ public static class Log
         }
     }
 
+    // 单行 JSON：ts / level / msg / trace（LxException）/ ex{type,msg}。测试直接调这个。
+    public static string FormatJsonLine(string level, string message, Exception? exception, DateTime now)
+    {
+        var payload = new Dictionary<string, object?>
+        {
+            ["ts"] = now.ToString("O"),
+            ["level"] = level,
+            ["msg"] = LogRedactor.Redact(message),
+        };
+
+        if (exception is LxException lx)
+        {
+            payload["trace"] = lx.TraceId;
+        }
+
+        if (exception is not null)
+        {
+            payload["ex"] = new Dictionary<string, object?>
+            {
+                ["type"] = exception.GetType().Name,
+                ["msg"] = LogRedactor.Redact(exception.Message),
+            };
+        }
+
+        return JsonSerializer.Serialize(payload, JsonOptions);
+    }
+
     private static string FileFor(DateTime now) =>
         Path.Combine(_directory, $"launcher-{now:yyyy-MM-dd}.log");
+
+    private static string JsonFileFor(DateTime now) =>
+        Path.Combine(_directory, $"launcher-{now:yyyy-MM-dd}.jsonl");
 
     private static void RotateIfTooLarge(string path)
     {
@@ -130,11 +190,15 @@ public static class Log
             }
 
             string stamp = DateTime.Now.ToString("yyyy-MM-dd-HHmmss");
-            string archive = Path.Combine(_directory, $"launcher-{stamp}.log");
+            string archive = Path.Combine(
+                _directory,
+                $"{Path.GetFileNameWithoutExtension(path)}-{stamp}{Path.GetExtension(path)}");
             int suffix = 1;
             while (File.Exists(archive))
             {
-                archive = Path.Combine(_directory, $"launcher-{stamp}-{suffix++}.log");
+                archive = Path.Combine(
+                    _directory,
+                    $"{Path.GetFileNameWithoutExtension(path)}-{stamp}-{suffix++}{Path.GetExtension(path)}");
             }
 
             File.Move(path, archive);
@@ -155,18 +219,21 @@ public static class Log
             }
 
             DateTime cutoff = DateTime.Now.AddDays(-KeepDays);
-            foreach (string file in Directory.EnumerateFiles(_directory, "launcher-*.log"))
+            foreach (string pattern in new[] { "launcher-*.log", "launcher-*.jsonl" })
             {
-                try
+                foreach (string file in Directory.EnumerateFiles(_directory, pattern))
                 {
-                    if (File.GetLastWriteTime(file) < cutoff)
+                    try
                     {
-                        File.Delete(file);
+                        if (File.GetLastWriteTime(file) < cutoff)
+                        {
+                            File.Delete(file);
+                        }
                     }
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    // 单个文件删不掉不影响其他文件
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        // 单个文件删不掉不影响其他文件
+                    }
                 }
             }
         }
