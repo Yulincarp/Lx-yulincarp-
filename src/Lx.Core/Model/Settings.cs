@@ -21,7 +21,9 @@ public sealed record LaunchSettings(
     string? Theme = "light",
     // 崩溃上报：默认关闭，只有用户勾选且填了地址才会真的发出去
     bool TelemetryEnabled = false,
-    string? CrashReportUrl = null)
+    string? CrashReportUrl = null,
+    // 界面语言：zh-CN / en
+    string? Language = "zh-CN")
 {
     public const int MinAllowedMb = 256;
     public const int MaxAllowedMb = 65536;

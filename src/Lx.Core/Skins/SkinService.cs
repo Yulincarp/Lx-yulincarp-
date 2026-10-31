@@ -12,6 +12,76 @@ public static class SkinService
     public static string CachePath(string installRoot, string uuid) =>
         Path.Combine(installRoot, "cache", "skins", Normalize(uuid) + ".png");
 
+    // 用户自己选的本地皮肤；按账号 UUID 存，和在线皮肤分开，不会互相覆盖。
+    public static string CustomPath(string installRoot, string key) =>
+        Path.Combine(installRoot, "cache", "skins", "custom-" + Normalize(key) + ".png");
+
+    public static string? CustomSkinPath(string installRoot, string key)
+    {
+        string path = CustomPath(installRoot, key);
+        try
+        {
+            return File.Exists(path) && new FileInfo(path).Length > 0 ? path : null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+    }
+
+    // 导入本地皮肤：只接受 64×64 / 64×32 的 PNG（Minecraft 皮肤格式），其余拒绝。
+    public static string ImportLocal(string installRoot, string key, string sourcePath, out string error)
+    {
+        error = string.Empty;
+
+        if (!File.Exists(sourcePath))
+        {
+            error = "找不到这个文件";
+            return string.Empty;
+        }
+
+        if (!sourcePath.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+        {
+            error = "皮肤必须是 PNG 图片（64×64 或 64×32）";
+            return string.Empty;
+        }
+
+        try
+        {
+            (int width, int height) = PngSize(File.ReadAllBytes(sourcePath));
+            bool valid = width == 64 && (height == 64 || height == 32);
+            if (!valid)
+            {
+                error = $"皮肤尺寸不对：{width}×{height}，需要 64×64 或 64×32";
+                return string.Empty;
+            }
+
+            string target = CustomPath(installRoot, key);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(sourcePath, target, overwrite: true);
+            return target;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            error = $"读取皮肤失败：{ex.Message}";
+            return string.Empty;
+        }
+    }
+
+    // 只读 PNG 头（IHDR）拿宽高，不依赖图片库。
+    private static (int Width, int Height) PngSize(byte[] bytes)
+    {
+        if (bytes.Length < 24 ||
+            bytes[0] != 0x89 || bytes[1] != 0x50 || bytes[2] != 0x4E || bytes[3] != 0x47)
+        {
+            throw new ArgumentException("不是 PNG 文件");
+        }
+
+        int width = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+        int height = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+        return (width, height);
+    }
+
     // 已缓存的皮肤路径；没有或为空文件返回 null。
     public static string? CachedSkinPath(string installRoot, string uuid)
     {

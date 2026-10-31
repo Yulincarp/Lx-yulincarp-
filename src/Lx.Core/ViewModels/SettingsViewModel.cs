@@ -1,3 +1,4 @@
+using Lx.Probe.Localization;
 using Lx.Probe.Model;
 using Lx.Probe.Resolve;
 
@@ -41,6 +42,9 @@ public sealed class SettingsViewModel
 
     public string CrashReportUrl { get; set; } = string.Empty;
 
+    // 界面语言：zh-CN / en
+    public string Language { get; set; } = L10n.DefaultLanguage;
+
     public static SettingsViewModel From(LaunchSettings settings) => new()
     {
         MinMemoryMb = settings.MinMemoryMb.ToString(),
@@ -59,6 +63,7 @@ public sealed class SettingsViewModel
         Theme = ThemeChoice.Normalize(settings.Theme),
         TelemetryEnabled = settings.TelemetryEnabled,
         CrashReportUrl = settings.CrashReportUrl ?? string.Empty,
+        Language = L10n.Normalize(settings.Language),
     };
 
     // 校验通过就给出完整的 LaunchSettings；否则 settings 为 null，error 是给用户看的一句话。
@@ -146,7 +151,8 @@ public sealed class SettingsViewModel
             UpdateChannel: UpdateChannel,
             Theme: ThemeChoice.Normalize(Theme),
             TelemetryEnabled: TelemetryEnabled,
-            CrashReportUrl: crashUrl.Length == 0 ? null : crashUrl);
+            CrashReportUrl: crashUrl.Length == 0 ? null : crashUrl,
+            Language: L10n.Normalize(Language));
 
         return true;
     }

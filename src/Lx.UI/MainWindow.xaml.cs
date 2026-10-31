@@ -15,6 +15,7 @@ using Lx.Probe;
 using Lx.Probe.Auth;
 using Lx.Probe.Diagnostics;
 using Lx.Probe.Instances;
+using Lx.Probe.Localization;
 using Lx.Probe.Loaders;
 using Lx.Probe.Launch;
 using Lx.Probe.Model;
@@ -238,11 +239,44 @@ public partial class MainWindow : Window
             : $"有效期至 {local:yyyy-MM-dd HH:mm}（还剩 {Math.Max(0, (int)remaining.TotalDays)} 天）";
     }
 
+    private void PickSkin_Click(object sender, RoutedEventArgs e)
+    {
+        if (AccountBox?.SelectedItem is not Account account)
+        {
+            Log("先在账号下拉框里选一个账号，再选皮肤");
+            return;
+        }
+
+        var dialog = new OpenFileDialog
+        {
+            Title = "选择皮肤（64×64 或 64×32 的 PNG）",
+            Filter = "Minecraft 皮肤|*.png",
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        string path = SkinService.ImportLocal(_installRoot, account.Uuid, dialog.FileName, out string error);
+        if (path.Length == 0)
+        {
+            Log($"导入皮肤失败：{error}");
+            MessageBox.Show(this, error, "皮肤导入失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        Log($"已导入本地皮肤：{account.Name}（只用于启动器头像预览，不会注入游戏）");
+        RefreshAccountInfo();
+    }
+
     private async void LoadAvatar(Account account)
     {
         try
         {
-            string? path = SkinService.CachedSkinPath(_installRoot, account.Uuid);
+            // 本地皮肤优先（离线/自定义），其次才是在线缓存和拉取
+            string? path = SkinService.CustomSkinPath(_installRoot, account.Uuid)
+                ?? SkinService.CachedSkinPath(_installRoot, account.Uuid);
             if (path is null && account.Type != "offline")
             {
                 path = await SkinService.GetSkinAsync(_installRoot, account.Uuid, account.ApiRoot);
@@ -1888,7 +1922,7 @@ public partial class MainWindow : Window
 
             _downloadFailures.Clear();
             CopyFailuresButton.IsEnabled = false;
-            CopyFailuresButton.Content = "复制失败清单";
+            CopyFailuresButton.Content = L10n.T("Btn_CopyFailures");
             Progress.Value = 0;
             Progress.Maximum = updates.Count;
 
@@ -1910,7 +1944,7 @@ public partial class MainWindow : Window
             if (failed > 0)
             {
                 CopyFailuresButton.IsEnabled = true;
-                CopyFailuresButton.Content = $"复制失败清单 ({failed})";
+                CopyFailuresButton.Content = L10n.T("Btn_CopyFailuresCount", failed);
                 StatusText.Text = $"更新完成，失败 {failed} 个";
                 Log($"[警告] mod 更新完成，失败 {failed} 个");
             }
@@ -2293,7 +2327,7 @@ public partial class MainWindow : Window
         ModrinthStatusText.Text = "安装中…";
         _downloadFailures.Clear();
         CopyFailuresButton.IsEnabled = false;
-        CopyFailuresButton.Content = "复制失败清单";
+        CopyFailuresButton.Content = L10n.T("Btn_CopyFailures");
         StatusText.Text = $"安装 {project.Title}…";
         Progress.Value = 0;
         Progress.Maximum = 1;
@@ -2339,7 +2373,7 @@ public partial class MainWindow : Window
             if (failed > 0)
             {
                 CopyFailuresButton.IsEnabled = true;
-                CopyFailuresButton.Content = $"复制失败清单 ({failed})";
+                CopyFailuresButton.Content = L10n.T("Btn_CopyFailuresCount", failed);
                 ModrinthStatusText.Text = $"安装完成，失败 {failed} 个";
                 StatusText.Text = $"安装完成，失败 {failed} 个";
                 Log($"[警告] {project.Title} 安装完成，但 {failed} 个文件失败");
@@ -2430,12 +2464,12 @@ public partial class MainWindow : Window
 
         _downloadFailures.Clear();
         CopyFailuresButton.IsEnabled = false;
-        CopyFailuresButton.Content = "复制失败清单";
+        CopyFailuresButton.Content = L10n.T("Btn_CopyFailures");
 
         var cts = new CancellationTokenSource();
         _launchCts = cts;
         _launchStartedAt = DateTime.Now;
-        LaunchButton.Content = "取消";
+        LaunchButton.Content = L10n.T("Btn_Cancel");
         LaunchButton.IsEnabled = true;
         StatusText.Text = "准备中…";
         Progress.Value = 0;
@@ -2509,7 +2543,7 @@ public partial class MainWindow : Window
             if (failureCount > 0)
             {
                 CopyFailuresButton.IsEnabled = true;
-                CopyFailuresButton.Content = $"复制失败清单 ({failureCount})";
+                CopyFailuresButton.Content = L10n.T("Btn_CopyFailuresCount", failureCount);
                 Log($"[警告] 有 {failureCount} 个文件下载失败，已改用本地已有文件继续启动");
             }
 
@@ -2537,12 +2571,12 @@ public partial class MainWindow : Window
 
             if (_gameProcess is null)
             {
-                LaunchButton.Content = "启动游戏";
+                LaunchButton.Content = L10n.T("Btn_Launch");
                 LaunchButton.IsEnabled = true;
             }
             else
             {
-                LaunchButton.Content = "游戏运行中…";
+                LaunchButton.Content = L10n.T("Btn_Running");
                 LaunchButton.IsEnabled = false;
             }
         }
@@ -2597,9 +2631,9 @@ public partial class MainWindow : Window
         _launchStartedAt = DateTime.Now;
         _downloadFailures.Clear();
         CopyFailuresButton.IsEnabled = false;
-        CopyFailuresButton.Content = "复制失败清单";
+        CopyFailuresButton.Content = L10n.T("Btn_CopyFailures");
         RepairButton.IsEnabled = false;
-        LaunchButton.Content = "取消";
+        LaunchButton.Content = L10n.T("Btn_Cancel");
         LaunchButton.IsEnabled = true;
         StatusText.Text = "校验中…";
         Progress.Value = 0;
@@ -2636,7 +2670,7 @@ public partial class MainWindow : Window
             if (failureCount > 0)
             {
                 CopyFailuresButton.IsEnabled = true;
-                CopyFailuresButton.Content = $"复制失败清单 ({failureCount})";
+                CopyFailuresButton.Content = L10n.T("Btn_CopyFailuresCount", failureCount);
                 StatusText.Text = $"校验完成：仍有 {failureCount} 个文件失败";
                 Log($"[警告] 校验/修复完成，仍有 {failureCount} 个文件失败");
             }
@@ -2666,7 +2700,7 @@ public partial class MainWindow : Window
 
             cts.Dispose();
             RepairButton.IsEnabled = true;
-            LaunchButton.Content = _gameProcess is null ? "启动游戏" : "游戏运行中…";
+            LaunchButton.Content = _gameProcess is null ? L10n.T("Btn_Launch") : L10n.T("Btn_Running");
             LaunchButton.IsEnabled = _gameProcess is null;
         }
     }
@@ -2701,7 +2735,7 @@ public partial class MainWindow : Window
         process.Exited += GameProcess_Exited;
 
         LaunchButton.IsEnabled = false;
-        LaunchButton.Content = "游戏运行中…";
+        LaunchButton.Content = L10n.T("Btn_Running");
         StatusText.Text = $"游戏运行中（PID {process.Id}）";
         Log($"已启动 java（PID {process.Id}）");
     }
@@ -2754,7 +2788,7 @@ public partial class MainWindow : Window
         string durationText = FormatDuration(duration);
 
         LaunchButton.IsEnabled = true;
-        LaunchButton.Content = "启动游戏";
+        LaunchButton.Content = L10n.T("Btn_Launch");
         StatusText.Text = exitCode is null or 0
             ? $"游戏已退出（{durationText}）"
             : $"游戏异常退出（退出码 {exitCode}，{durationText}）";
@@ -2829,7 +2863,7 @@ public partial class MainWindow : Window
         if (count > 0)
         {
             CopyFailuresButton.IsEnabled = true;
-            CopyFailuresButton.Content = $"复制失败清单 ({count})";
+            CopyFailuresButton.Content = L10n.T("Btn_CopyFailuresCount", count);
         }
 
         LxLog.Error($"{context}（trace {error.TraceId}）", error);

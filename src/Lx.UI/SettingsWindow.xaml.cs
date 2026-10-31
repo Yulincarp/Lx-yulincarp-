@@ -95,6 +95,11 @@ public partial class SettingsWindow : Window
             .OfType<ComboBoxItem>()
             .FirstOrDefault(item => string.Equals(item.Tag as string, _vm.Theme, StringComparison.OrdinalIgnoreCase))
             ?? ThemeBox.Items[0];
+
+        LanguageBox.SelectedItem = LanguageBox.Items
+            .OfType<ComboBoxItem>()
+            .FirstOrDefault(item => string.Equals(item.Tag as string, _vm.Language, StringComparison.OrdinalIgnoreCase))
+            ?? LanguageBox.Items[0];
     }
 
     private string SelectedSourceKey() =>
@@ -225,6 +230,7 @@ public partial class SettingsWindow : Window
         _vm.ProxyUrl = ProxyUrlBox.Text;
         _vm.UpdateChannel = (UpdateChannelBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "stable";
         _vm.Theme = (ThemeBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "light";
+        _vm.Language = (LanguageBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "zh-CN";
         _vm.TelemetryEnabled = TelemetryBox.IsChecked == true;
         _vm.CrashReportUrl = CrashUrlBox.Text;
 
@@ -235,6 +241,7 @@ public partial class SettingsWindow : Window
         }
 
         SettingsStore.Save(_installRoot, settings);
+        Lx.Probe.Localization.L10n.SetLanguage(settings.Language);
         Downloader.ConfigureProxy(settings.ProxyMode, settings.ProxyUrl);
         ThemeManager.Apply(settings.Theme);
         DialogResult = true;

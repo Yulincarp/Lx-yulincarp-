@@ -41,7 +41,9 @@ public partial class App : Application
 
         Log.Initialize(Path.Combine(installRoot, "logs"));
         Log.Info($"Lx yulin carp {AppInfo.Version} 启动；数据目录 {installRoot}（{(AppPaths.IsPortable ? "便携模式" : "标准模式")}）");
-        ThemeManager.Apply(SettingsStore.Load(installRoot).Theme);
+        LaunchSettings startupSettings = SettingsStore.Load(installRoot);
+        Lx.Probe.Localization.L10n.SetLanguage(startupSettings.Language);
+        ThemeManager.Apply(startupSettings.Theme);
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
@@ -68,6 +70,12 @@ public partial class App : Application
         // 不再用 App.xaml 的 StartupUri：第二个实例要在创建窗口之前就退出。
         var window = new MainWindow();
         MainWindow = window;
+        window.Loaded += (_, _) =>
+        {
+            // 显示缩放信息写进日志：改 125%/150% 后重启，看这一行和实际布局
+            DpiScale dpi = System.Windows.Media.VisualTreeHelper.GetDpi(window);
+            Log.Info($"显示缩放：{dpi.PixelsPerDip:P0}（{dpi.PixelsPerInchX:F0} DPI），窗口 {window.ActualWidth:F0}×{window.ActualHeight:F0} DIP");
+        };
         window.Show();
     }
 
