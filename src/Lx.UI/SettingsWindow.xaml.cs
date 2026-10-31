@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Lx.Probe;
 using Lx.Probe.Launch;
+using Lx.Probe.Localization;
 using Lx.Probe.Model;
 using Lx.Probe.Resolve;
 using Lx.Probe.Updates;
@@ -21,16 +22,16 @@ public partial class SettingsWindow : Window
 
     private static readonly SourceChoice[] Sources =
     {
-        new(DownloadSourceSettings.Official, "官方（Mojang）"),
-        new(DownloadSourceSettings.Bmclapi, "BMCLAPI 镜像（国内推荐）"),
-        new(DownloadSourceSettings.Custom, "自定义（兼容 BMCLAPI 路径）"),
+        new(DownloadSourceSettings.Official, L10n.T("S187")),
+        new(DownloadSourceSettings.Bmclapi, L10n.T("S188")),
+        new(DownloadSourceSettings.Custom, L10n.T("S189")),
     };
 
     private static readonly ProxyChoice[] Proxies =
     {
-        new("system", "系统代理（Windows 设置）"),
-        new("none", "直连（不使用代理）"),
-        new("manual", "手动 HTTP 代理"),
+        new("system", L10n.T("S190")),
+        new("none", L10n.T("S191")),
+        new("manual", L10n.T("S192")),
     };
 
     private readonly string _installRoot;
@@ -59,7 +60,7 @@ public partial class SettingsWindow : Window
 
         var choices = new List<JavaChoice>
         {
-            new(null, "自动（按版本选择，缺失时自动下载）"),
+            new(null, L10n.T("S186")),
         };
 
         foreach ((string path, int? major) in JavaRuntime.Discover())

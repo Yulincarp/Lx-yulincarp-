@@ -331,6 +331,50 @@ public partial class MainWindow : Window
 
     private void Home_Click(object sender, RoutedEventArgs e) => ShowPage(HomeView);
 
+    // 键盘操作：Ctrl+1~7 切页，F5 校验/修复，Ctrl+Enter 启动，Esc 取消正在进行的启动。
+    private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        bool control = Keyboard.Modifiers == ModifierKeys.Control;
+
+        if (control && e.Key is >= Key.D1 and <= Key.D7)
+        {
+            ShowPage((e.Key - Key.D1) switch
+            {
+                0 => HomeView,
+                1 => VersionView,
+                2 => InstanceView,
+                3 => ResourceView,
+                4 => AccountView,
+                5 => SettingsView,
+                _ => LogView,
+            });
+
+            e.Handled = true;
+            return;
+        }
+
+        if (control && e.Key == Key.Enter)
+        {
+            Launch_Click(LaunchButton, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.F5)
+        {
+            Repair_Click(RepairButton, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape && _launchCts is not null)
+        {
+            _launchCts.Cancel();
+            Log("已请求取消");
+            e.Handled = true;
+        }
+    }
+
     private void VersionPage_Click(object sender, RoutedEventArgs e) => ShowPage(VersionView);
 
     private void InstancePage_Click(object sender, RoutedEventArgs e) => ShowPage(InstanceView);
@@ -1922,7 +1966,7 @@ public partial class MainWindow : Window
 
             _downloadFailures.Clear();
             CopyFailuresButton.IsEnabled = false;
-            CopyFailuresButton.Content = L10n.T("Btn_CopyFailures");
+            CopyFailuresButton.Content = L10n.T("S175");
             Progress.Value = 0;
             Progress.Maximum = updates.Count;
 
@@ -1944,7 +1988,7 @@ public partial class MainWindow : Window
             if (failed > 0)
             {
                 CopyFailuresButton.IsEnabled = true;
-                CopyFailuresButton.Content = L10n.T("Btn_CopyFailuresCount", failed);
+                CopyFailuresButton.Content = L10n.T("S166", failed);
                 StatusText.Text = $"更新完成，失败 {failed} 个";
                 Log($"[警告] mod 更新完成，失败 {failed} 个");
             }
@@ -2327,7 +2371,7 @@ public partial class MainWindow : Window
         ModrinthStatusText.Text = "安装中…";
         _downloadFailures.Clear();
         CopyFailuresButton.IsEnabled = false;
-        CopyFailuresButton.Content = L10n.T("Btn_CopyFailures");
+        CopyFailuresButton.Content = L10n.T("S175");
         StatusText.Text = $"安装 {project.Title}…";
         Progress.Value = 0;
         Progress.Maximum = 1;
@@ -2373,7 +2417,7 @@ public partial class MainWindow : Window
             if (failed > 0)
             {
                 CopyFailuresButton.IsEnabled = true;
-                CopyFailuresButton.Content = L10n.T("Btn_CopyFailuresCount", failed);
+                CopyFailuresButton.Content = L10n.T("S166", failed);
                 ModrinthStatusText.Text = $"安装完成，失败 {failed} 个";
                 StatusText.Text = $"安装完成，失败 {failed} 个";
                 Log($"[警告] {project.Title} 安装完成，但 {failed} 个文件失败");
@@ -2464,12 +2508,12 @@ public partial class MainWindow : Window
 
         _downloadFailures.Clear();
         CopyFailuresButton.IsEnabled = false;
-        CopyFailuresButton.Content = L10n.T("Btn_CopyFailures");
+        CopyFailuresButton.Content = L10n.T("S175");
 
         var cts = new CancellationTokenSource();
         _launchCts = cts;
         _launchStartedAt = DateTime.Now;
-        LaunchButton.Content = L10n.T("Btn_Cancel");
+        LaunchButton.Content = L10n.T("S003");
         LaunchButton.IsEnabled = true;
         StatusText.Text = "准备中…";
         Progress.Value = 0;
@@ -2543,7 +2587,7 @@ public partial class MainWindow : Window
             if (failureCount > 0)
             {
                 CopyFailuresButton.IsEnabled = true;
-                CopyFailuresButton.Content = L10n.T("Btn_CopyFailuresCount", failureCount);
+                CopyFailuresButton.Content = L10n.T("S166", failureCount);
                 Log($"[警告] 有 {failureCount} 个文件下载失败，已改用本地已有文件继续启动");
             }
 
@@ -2571,12 +2615,12 @@ public partial class MainWindow : Window
 
             if (_gameProcess is null)
             {
-                LaunchButton.Content = L10n.T("Btn_Launch");
+                LaunchButton.Content = L10n.T("S172");
                 LaunchButton.IsEnabled = true;
             }
             else
             {
-                LaunchButton.Content = L10n.T("Btn_Running");
+                LaunchButton.Content = L10n.T("S165");
                 LaunchButton.IsEnabled = false;
             }
         }
@@ -2631,9 +2675,9 @@ public partial class MainWindow : Window
         _launchStartedAt = DateTime.Now;
         _downloadFailures.Clear();
         CopyFailuresButton.IsEnabled = false;
-        CopyFailuresButton.Content = L10n.T("Btn_CopyFailures");
+        CopyFailuresButton.Content = L10n.T("S175");
         RepairButton.IsEnabled = false;
-        LaunchButton.Content = L10n.T("Btn_Cancel");
+        LaunchButton.Content = L10n.T("S003");
         LaunchButton.IsEnabled = true;
         StatusText.Text = "校验中…";
         Progress.Value = 0;
@@ -2670,7 +2714,7 @@ public partial class MainWindow : Window
             if (failureCount > 0)
             {
                 CopyFailuresButton.IsEnabled = true;
-                CopyFailuresButton.Content = L10n.T("Btn_CopyFailuresCount", failureCount);
+                CopyFailuresButton.Content = L10n.T("S166", failureCount);
                 StatusText.Text = $"校验完成：仍有 {failureCount} 个文件失败";
                 Log($"[警告] 校验/修复完成，仍有 {failureCount} 个文件失败");
             }
@@ -2700,7 +2744,7 @@ public partial class MainWindow : Window
 
             cts.Dispose();
             RepairButton.IsEnabled = true;
-            LaunchButton.Content = _gameProcess is null ? L10n.T("Btn_Launch") : L10n.T("Btn_Running");
+            LaunchButton.Content = _gameProcess is null ? L10n.T("S172") : L10n.T("S165");
             LaunchButton.IsEnabled = _gameProcess is null;
         }
     }
@@ -2735,7 +2779,7 @@ public partial class MainWindow : Window
         process.Exited += GameProcess_Exited;
 
         LaunchButton.IsEnabled = false;
-        LaunchButton.Content = L10n.T("Btn_Running");
+        LaunchButton.Content = L10n.T("S165");
         StatusText.Text = $"游戏运行中（PID {process.Id}）";
         Log($"已启动 java（PID {process.Id}）");
     }
@@ -2788,7 +2832,7 @@ public partial class MainWindow : Window
         string durationText = FormatDuration(duration);
 
         LaunchButton.IsEnabled = true;
-        LaunchButton.Content = L10n.T("Btn_Launch");
+        LaunchButton.Content = L10n.T("S172");
         StatusText.Text = exitCode is null or 0
             ? $"游戏已退出（{durationText}）"
             : $"游戏异常退出（退出码 {exitCode}，{durationText}）";
@@ -2863,7 +2907,7 @@ public partial class MainWindow : Window
         if (count > 0)
         {
             CopyFailuresButton.IsEnabled = true;
-            CopyFailuresButton.Content = L10n.T("Btn_CopyFailuresCount", count);
+            CopyFailuresButton.Content = L10n.T("S166", count);
         }
 
         LxLog.Error($"{context}（trace {error.TraceId}）", error);

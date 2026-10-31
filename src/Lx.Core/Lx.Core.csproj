@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -11,6 +11,11 @@
   <ItemGroup>
     <PackageReference Include="SharpCompress" Version="0.50.7" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 语言词条：编译进程序集，L10n 用固定资源名读取 -->
+    <EmbeddedResource Include="Localization\strings.json" LogicalName="Lx.Core.Localization.strings.json" />
   </ItemGroup>
 
 </Project>

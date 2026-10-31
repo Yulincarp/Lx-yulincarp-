@@ -1,7 +1,8 @@
 <Window x:Class="Lx.UI.LoginWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="外置登录（authlib-injector）" Height="300" Width="460"
+        xmlns:ui="clr-namespace:Lx.UI"
+        Title="{ui:T S016}" Height="300" Width="460"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
     <Grid Margin="18">
         <Grid.RowDefinitions>
@@ -12,23 +13,23 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="站点 API 根" Margin="0,0,0,4"/>
+        <TextBlock Grid.Row="0" Text="{ui:T S017}" Margin="0,0,0,4"/>
         <TextBox Grid.Row="0" x:Name="ApiBox" Margin="0,22,0,0" Height="26"
                  Text="https://littleskin.cn/api/yggdrasil"/>
 
-        <TextBlock Grid.Row="1" Text="邮箱 / 用户名" Margin="0,12,0,0"/>
+        <TextBlock Grid.Row="1" Text="{ui:T S018}" Margin="0,12,0,0"/>
         <TextBox Grid.Row="1" x:Name="EmailBox" Margin="0,34,0,0" Height="26"/>
 
-        <TextBlock Grid.Row="2" Text="密码（不保存）" Margin="0,12,0,0"/>
+        <TextBlock Grid.Row="2" Text="{ui:T S019}" Margin="0,12,0,0"/>
         <PasswordBox Grid.Row="2" x:Name="PasswordBox" Margin="0,34,0,0" Height="26"/>
 
         <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,16,0,0">
-            <Button x:Name="LoginButton" Content="登录" Padding="20,5" Click="Login_Click"/>
-            <Button Content="取消" Padding="20,5" Margin="10,0,0,0" Click="Cancel_Click"/>
+            <Button x:Name="LoginButton" Content="{ui:T S020}" Padding="20,5" Click="Login_Click"/>
+            <Button Content="{ui:T S003}" Padding="20,5" Margin="10,0,0,0" Click="Cancel_Click"/>
             <TextBlock x:Name="StatusText" Margin="12,0,0,0" VerticalAlignment="Center" Foreground="Gray"/>
         </StackPanel>
 
         <TextBlock Grid.Row="4" x:Name="HintText" Margin="0,14,0,0" TextWrapping="Wrap" Foreground="Gray"
-                   Text="登录成功后 token 会存进 minecraft\accounts.json（明文，仅本机）。"/>
+                   Text="{ui:T S021}"/>
     </Grid>
 </Window>

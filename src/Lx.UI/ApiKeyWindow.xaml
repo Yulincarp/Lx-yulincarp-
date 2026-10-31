@@ -1,6 +1,7 @@
 <Window x:Class="Lx.UI.ApiKeyWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="clr-namespace:Lx.UI"
         Title="CurseForge API Key" Height="220" Width="520"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
     <Grid Margin="18">
@@ -11,12 +12,12 @@
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0" TextWrapping="Wrap"
-                   Text="这个整合包来自 CurseForge，需要 API key 才能自动下载 mod。key 免费申请：curseforge.com/account/api-keys，填一次会保存在 minecraft\curseforge-key.txt。"/>
+                   Text="{ui:T S001}"/>
         <TextBox Grid.Row="1" x:Name="KeyBox" Height="26" Margin="0,12,0,0"/>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,16,0,0">
-            <Button Content="保存并导入" Padding="16,5" Click="Save_Click"/>
-            <Button Content="取消" Padding="16,5" Margin="10,0,0,0" Click="Cancel_Click"/>
+            <Button Content="{ui:T S002}" Padding="16,5" Click="Save_Click"/>
+            <Button Content="{ui:T S003}" Padding="16,5" Margin="10,0,0,0" Click="Cancel_Click"/>
         </StackPanel>
     </Grid>
 </Window>

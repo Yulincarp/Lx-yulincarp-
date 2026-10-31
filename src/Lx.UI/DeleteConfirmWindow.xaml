@@ -1,7 +1,8 @@
 <Window x:Class="Lx.UI.DeleteConfirmWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="删除实例文件" Height="300" Width="560"
+        xmlns:ui="clr-namespace:Lx.UI"
+        Title="{ui:T S004}" Height="300" Width="560"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
     <Grid Margin="18">
         <Grid.RowDefinitions>
@@ -13,22 +14,22 @@
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0" TextWrapping="Wrap" FontWeight="Bold" Foreground="#E53935"
-                   Text="这一步会把实例目录整个删掉，存档和 mods 都不进回收站，删完不能恢复。"/>
+                   Text="{ui:T S005}"/>
 
         <TextBlock Grid.Row="1" x:Name="PathText" TextWrapping="Wrap" Margin="0,10,0,0" FontSize="11"
                    FontFamily="Consolas" Foreground="{DynamicResource TextSecondary}"/>
 
         <TextBlock Grid.Row="2" Margin="0,14,0,0" TextWrapping="Wrap">
-            <Run Text="确认请把实例名原样敲一遍："/>
+            <Run Text="{ui:T S006}"/>
             <Run x:Name="NameRun" FontWeight="Bold"/>
         </TextBlock>
 
         <TextBox Grid.Row="3" x:Name="NameBox" Height="28" Margin="0,8,0,0"
-                 ToolTip="必须和实例名一致，删除按钮才会亮"/>
+                 ToolTip="{ui:T S007}"/>
 
         <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,16,0,0">
-            <Button x:Name="DeleteButton" Content="连文件删除" Padding="16,5" IsEnabled="False" Click="Delete_Click"/>
-            <Button Content="取消" Padding="16,5" Margin="10,0,0,0" IsCancel="True" Click="Cancel_Click"/>
+            <Button x:Name="DeleteButton" Content="{ui:T S008}" Padding="16,5" IsEnabled="False" Click="Delete_Click"/>
+            <Button Content="{ui:T S003}" Padding="16,5" Margin="10,0,0,0" IsCancel="True" Click="Cancel_Click"/>
         </StackPanel>
     </Grid>
 </Window>
