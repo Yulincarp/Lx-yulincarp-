@@ -18,7 +18,10 @@ public sealed record LaunchSettings(
     string? ProxyMode = "system",
     string? ProxyUrl = null,
     string? UpdateChannel = "stable",
-    string? Theme = "light")
+    string? Theme = "light",
+    // 崩溃上报：默认关闭，只有用户勾选且填了地址才会真的发出去
+    bool TelemetryEnabled = false,
+    string? CrashReportUrl = null)
 {
     public const int MinAllowedMb = 256;
     public const int MaxAllowedMb = 65536;

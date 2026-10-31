@@ -54,6 +54,8 @@ public partial class SettingsWindow : Window
         WindowHeightBox.Text = _vm.WindowHeight;
         FullscreenBox.IsChecked = _vm.Fullscreen;
         ConcurrencyBox.Text = _vm.DownloadConcurrency;
+        TelemetryBox.IsChecked = _vm.TelemetryEnabled;
+        CrashUrlBox.Text = _vm.CrashReportUrl;
 
         var choices = new List<JavaChoice>
         {
@@ -220,6 +222,8 @@ public partial class SettingsWindow : Window
         _vm.ProxyUrl = ProxyUrlBox.Text;
         _vm.UpdateChannel = (UpdateChannelBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "stable";
         _vm.DarkTheme = ThemeBox.SelectedIndex == 1;
+        _vm.TelemetryEnabled = TelemetryBox.IsChecked == true;
+        _vm.CrashReportUrl = CrashUrlBox.Text;
 
         if (!_vm.TryBuild(out LaunchSettings? settings, out string error) || settings is null)
         {
@@ -232,6 +236,12 @@ public partial class SettingsWindow : Window
         ThemeManager.Apply(settings.Theme);
         DialogResult = true;
         Close();
+    }
+
+    private void Privacy_Click(object sender, RoutedEventArgs e)
+    {
+        MessageBox.Show(this, Lx.Probe.Diagnostics.CrashReporter.PrivacyNotice, "崩溃上报说明",
+            MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e)

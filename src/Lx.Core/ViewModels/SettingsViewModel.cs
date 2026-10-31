@@ -35,6 +35,11 @@ public sealed class SettingsViewModel
 
     public bool DarkTheme { get; set; }
 
+    // 崩溃上报：默认关闭；地址可以留空（只存本地 logs\crash\）
+    public bool TelemetryEnabled { get; set; }
+
+    public string CrashReportUrl { get; set; } = string.Empty;
+
     public static SettingsViewModel From(LaunchSettings settings) => new()
     {
         MinMemoryMb = settings.MinMemoryMb.ToString(),
@@ -51,6 +56,8 @@ public sealed class SettingsViewModel
         ProxyUrl = settings.ProxyUrl ?? string.Empty,
         UpdateChannel = settings.UpdateChannel ?? "stable",
         DarkTheme = string.Equals(settings.Theme, "dark", StringComparison.OrdinalIgnoreCase),
+        TelemetryEnabled = settings.TelemetryEnabled,
+        CrashReportUrl = settings.CrashReportUrl ?? string.Empty,
     };
 
     // 校验通过就给出完整的 LaunchSettings；否则 settings 为 null，error 是给用户看的一句话。
@@ -112,6 +119,16 @@ public sealed class SettingsViewModel
             }
         }
 
+        // 上传地址可以留空（只存本地）；填了就必须是 http(s)
+        string crashUrl = CrashReportUrl.Trim();
+        if (crashUrl.Length > 0 &&
+            (!Uri.TryCreate(crashUrl, UriKind.Absolute, out Uri? crashUri) ||
+             (crashUri.Scheme != Uri.UriSchemeHttp && crashUri.Scheme != Uri.UriSchemeHttps)))
+        {
+            error = "崩溃上报地址要填 http:// 或 https:// 开头（留空则只存本地）";
+            return false;
+        }
+
         settings = new LaunchSettings(
             MinMemoryMb: min,
             MaxMemoryMb: max,
@@ -126,7 +143,9 @@ public sealed class SettingsViewModel
             ProxyMode: proxyMode,
             ProxyUrl: proxyUrl,
             UpdateChannel: UpdateChannel,
-            Theme: DarkTheme ? "dark" : "light");
+            Theme: DarkTheme ? "dark" : "light",
+            TelemetryEnabled: TelemetryEnabled,
+            CrashReportUrl: crashUrl.Length == 0 ? null : crashUrl);
 
         return true;
     }

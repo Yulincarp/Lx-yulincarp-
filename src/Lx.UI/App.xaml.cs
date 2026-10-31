@@ -149,7 +149,7 @@ public partial class App : Application
         e.SetObserved();
     }
 
-    // 弹窗只做三件事：说人话、给日志路径、能一键打开目录。弹窗里绝不能再抛异常。
+    // 弹窗只做四件事：说人话、写崩溃报告、给路径、能一键打开目录。弹窗里绝不能再抛异常。
     private static void ShowCrash(Exception exception, string hint)
     {
         if (_showingCrash)
@@ -160,10 +160,42 @@ public partial class App : Application
         _showingCrash = true;
         try
         {
+            string installRoot = AppPaths.ResolveInstallRoot();
+            CrashReport report = CrashReporter.Build(exception, "启动器");
+
+            // 默认只落本地；用户勾了"同意上传"且填了地址才发送，最多等 3 秒
+            if (CrashReporter.ShouldUpload(SettingsStore.Load(installRoot), out string endpoint))
+            {
+                try
+                {
+                    Task<CrashReport> upload = CrashReporter.UploadAsync(report, endpoint);
+                    report = upload.Wait(TimeSpan.FromSeconds(3))
+                        ? upload.Result
+                        : report with { UploadError = "上传超时" };
+                }
+                catch (AggregateException ex)
+                {
+                    report = report with { UploadError = ex.GetBaseException().Message };
+                }
+            }
+
+            string reportPath = string.Empty;
+            try
+            {
+                reportPath = CrashReporter.WriteLocal(report, installRoot);
+                Log.Info($"崩溃报告已写入：{reportPath}（上传：{(report.Uploaded ? "成功" : report.UploadError ?? "未开启")}）");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Log.Warn($"崩溃报告写入失败：{ex.Message}");
+            }
+
             string file = Log.CurrentFile ?? Log.DirectoryPath;
-            string text = "启动器遇到错误：" + exception.Message
+            string text = "启动器遇到错误：" + report.ExceptionMessage
                 + Environment.NewLine + Environment.NewLine + hint
-                + Environment.NewLine + Environment.NewLine + "日志：" + file
+                + Environment.NewLine + Environment.NewLine + "trace：" + report.TraceId
+                + (reportPath.Length > 0 ? Environment.NewLine + "崩溃报告：" + reportPath : string.Empty)
+                + Environment.NewLine + "日志：" + file
                 + Environment.NewLine + Environment.NewLine + "是否打开日志文件夹？";
 
             MessageBoxResult result = MessageBox.Show(

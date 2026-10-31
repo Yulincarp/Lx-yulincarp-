@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Lx.Probe;
 using Lx.Probe.Auth;
+using Lx.Probe.Diagnostics;
 using Lx.Probe.Instances;
 using Lx.Probe.Launch;
 using Lx.Probe.Loaders;
@@ -52,6 +53,8 @@ bool packExportFlag = false;
 bool packRollbackFlag = false;
 bool packDryRunFlag = false;
 bool listSnapshotsFlag = false;
+bool crashReportTestFlag = false;
+string? crashUrlArg = null;
 
 for (int i = 0; i < args.Length; i++)
 {
@@ -180,6 +183,14 @@ for (int i = 0; i < args.Length; i++)
     {
         listSnapshotsFlag = true;
     }
+    else if (arg == "--crash-report-test")
+    {
+        crashReportTestFlag = true;
+    }
+    else if (arg == "--crash-url" && i + 1 < args.Length)
+    {
+        crashUrlArg = args[++i];
+    }
     else if (arg == "--snapshot" && i + 1 < args.Length)
     {
         snapshotArg = args[++i];
@@ -208,6 +219,26 @@ for (int i = 0; i < args.Length; i++)
 
 string installRoot = Path.GetFullPath(rootArg ?? AppPaths.ResolveInstallRoot());
 string versionId = versionArg ?? "1.20.4";
+
+// 崩溃上报自检：生成一份报告（含脱敏检查），给了 --crash-url 就顺手验证上传。
+if (crashReportTestFlag)
+{
+    var selfTest = CrashReporter.Build(
+        new InvalidOperationException("崩溃上报自检 https://example.com/?access_token=SECRET1234567890"),
+        "自检",
+        logTailLines: 0);
+
+    if (!string.IsNullOrWhiteSpace(crashUrlArg))
+    {
+        selfTest = await CrashReporter.UploadAsync(selfTest, crashUrlArg);
+    }
+
+    string reportPath = CrashReporter.WriteLocal(selfTest, installRoot);
+    Console.WriteLine($"崩溃报告：{reportPath}");
+    Console.WriteLine($"trace：{selfTest.TraceId}");
+    Console.WriteLine(selfTest.Uploaded ? "上传：成功" : $"上传：{selfTest.UploadError ?? "未开启"}");
+    return 0;
+}
 
 if (migrateDataArg is not null)
 {

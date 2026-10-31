@@ -110,6 +110,20 @@
                     <TextBlock Foreground="{DynamicResource TextSecondary}" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"
                                Text="发布版把对应通道的 update.json 放到数据目录，或在 LX_UPDATE_URL 指定。"/>
 
+                    <TextBlock Text="隐私与诊断" FontWeight="Bold" Margin="0,18,0,8"/>
+                    <CheckBox x:Name="TelemetryBox" Content="崩溃时上传诊断报告（默认关闭）"
+                              ToolTip="勾选后才会发送；报告内容见下方说明"/>
+                    <TextBlock Foreground="{DynamicResource TextSecondary}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"
+                               Text="包含：启动器/Windows/.NET 版本、异常类型与堆栈、最近约 80 行日志（token 与密钥自动打码）。不包含账号密码、存档、mods。"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock Text="上传地址：" VerticalAlignment="Center"/>
+                        <TextBox x:Name="CrashUrlBox" Width="300" Padding="6,3" Margin="6,0,8,0"
+                                 ToolTip="留空则只保存在本地 logs\crash\；也可以由环境变量 LX_CRASH_ENDPOINT 覆盖"/>
+                        <Button Content="隐私说明" Padding="10,3" Click="Privacy_Click"/>
+                    </StackPanel>
+                    <TextBlock Foreground="{DynamicResource TextSecondary}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"
+                               Text="不填地址时，崩溃报告只写到 logs\crash\，不会联网。"/> 
+
                     <TextBlock Text="语言 / 主题" FontWeight="Bold" Margin="0,18,0,8"/>
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="主题：" VerticalAlignment="Center"/>

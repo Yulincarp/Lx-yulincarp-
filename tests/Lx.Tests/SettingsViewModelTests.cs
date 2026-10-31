@@ -117,4 +117,38 @@ public class SettingsViewModelTests
         Assert.Null(settings!.JvmArgs);
         Assert.Null(settings.ProxyUrl);
     }
+
+    [Fact]
+    public void Telemetry_IsOffByDefault_AndUrlMayBeEmpty()
+    {
+        var vm = new SettingsViewModel();
+
+        Assert.False(vm.TelemetryEnabled);
+        Assert.True(vm.TryBuild(out LaunchSettings? settings, out _));
+        Assert.False(settings!.TelemetryEnabled);
+        Assert.Null(settings.CrashReportUrl);
+    }
+
+    [Fact]
+    public void Telemetry_RejectsNonHttpUrl()
+    {
+        var vm = new SettingsViewModel { TelemetryEnabled = true, CrashReportUrl = "crash.example.com/report" };
+
+        Assert.False(vm.TryBuild(out _, out string error));
+        Assert.Contains("崩溃上报地址", error);
+    }
+
+    [Fact]
+    public void Telemetry_KeepsValidUrlAndFlag()
+    {
+        var vm = new SettingsViewModel
+        {
+            TelemetryEnabled = true,
+            CrashReportUrl = " https://crash.example.com/report ",
+        };
+
+        Assert.True(vm.TryBuild(out LaunchSettings? settings, out _));
+        Assert.True(settings!.TelemetryEnabled);
+        Assert.Equal("https://crash.example.com/report", settings.CrashReportUrl);
+    }
 }
