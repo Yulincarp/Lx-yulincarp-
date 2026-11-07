@@ -133,4 +133,16 @@ public sealed class UpdateDeltaTests
             Directory.Delete(dir, recursive: true);
         }
     }
+
+    [Fact]
+    public void DeltaWorthwhile_OnlyForSmallChanges()
+    {
+        static UpdateFileEntry Entry(long size) => new("a.dll", new string('b', 64), size);
+
+        var small = new DeltaPlan(new[] { Entry(2L * 1024 * 1024) }, 10, Array.Empty<string>());
+        var huge = new DeltaPlan(new[] { Entry(180L * 1024 * 1024) }, 0, Array.Empty<string>());
+
+        Assert.True(UpdateService.IsDeltaWorthwhile(small));
+        Assert.False(UpdateService.IsDeltaWorthwhile(huge));
+    }
 }

@@ -46,6 +46,10 @@ public static class UpdateService
     public const string DefaultBetaManifestUrl =
         "https://github.com/Yulincarp/Lx-yulincarp-/releases/latest/download/update-beta.json";
 
+    // 差量的"值不值得"阈值：单文件发布下，差量要下的是未压缩的 exe，
+    // 反而比压缩过的整包大（191MB vs 74MB）。所以超过这个体积就别走差量了。
+    public const long DeltaWorthwhileBytes = 20L * 1024 * 1024;
+
     // update.json 地址：LX_UPDATE_URL 优先，其次数据目录下的 update.json（方便本地测试），最后走内置默认地址。
     public static string ResolveManifestUrl(string installRoot)
     {
@@ -145,6 +149,10 @@ public static class UpdateService
 
         return new DeltaPlan(downloads, unchanged, manifest.Delete ?? new List<string>());
     }
+
+    // 变化量小于阈值才走差量；否则整包更省流量（zip 是压缩过的，单个 exe 不是）。
+    public static bool IsDeltaWorthwhile(DeltaPlan plan) =>
+        plan.Download.Sum(entry => entry.Size) <= DeltaWorthwhileBytes;
 
     // 差量下载：只把变化的文件放进 staging，别的原样保留。
     public static async Task<StagedUpdate> DownloadDeltaAsync(

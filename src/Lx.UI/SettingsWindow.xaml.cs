@@ -181,6 +181,12 @@ public partial class SettingsWindow : Window
                         return;
                     }
 
+                    // 变化量太大时整包反而更小（zip 压缩过，差量下的是原始文件）
+                    if (!UpdateService.IsDeltaWorthwhile(plan))
+                    {
+                        throw new InvalidOperationException("变化太大，改走整包");
+                    }
+
                     staged = await UpdateService.DownloadDeltaAsync(info, AppContext.BaseDirectory, plan, progress);
                 }
                 catch (Exception ex) when (ex is System.Net.Http.HttpRequestException
