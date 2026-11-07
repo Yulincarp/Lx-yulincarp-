@@ -206,7 +206,26 @@ public static class PackSync
                 throw new InvalidOperationException($"整合包签名校验失败，已拒绝同步：{signatureError}");
             }
 
-            onProgress?.Invoke(new PackSyncProgress(SyncPhase.Loading, "清单签名校验通过"));
+            // 首次同步记住签名者公钥，之后必须一直是同一把。
+            // 只验签名的话，换掉整份 pack.json 再用自己的私钥重签一样能过；
+            // 有了这个钉子，"整包替换"这条路才被堵住。
+            string pinPath = Path.Combine(Path.GetFullPath(instanceDir), "pack-signer.json");
+            string pinned = File.Exists(pinPath) ? File.ReadAllText(pinPath).Trim() : string.Empty;
+            if (pinned.Length == 0)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(pinPath)!);
+                File.WriteAllText(pinPath, remote.SignerKey);
+                onProgress?.Invoke(new PackSyncProgress(SyncPhase.Loading, "清单签名校验通过（已记住签名者公钥）"));
+            }
+            else if (!string.Equals(pinned, remote.SignerKey, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "整合包签名者换了。可能是服主换了密钥，也可能是有人整包替换；确认无误后删掉实例里的 pack-signer.json 再同步。");
+            }
+            else
+            {
+                onProgress?.Invoke(new PackSyncProgress(SyncPhase.Loading, "清单签名校验通过"));
+            }
         }
         else
         {
