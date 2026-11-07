@@ -1,9 +1,9 @@
 <Project>
   <PropertyGroup>
-    <Version>1.4.2</Version>
-    <AssemblyVersion>1.4.2.0</AssemblyVersion>
-    <FileVersion>1.4.2.0</FileVersion>
-    <InformationalVersion>1.4.2</InformationalVersion>
+    <Version>1.5.0</Version>
+    <AssemblyVersion>1.5.0.0</AssemblyVersion>
+    <FileVersion>1.5.0.0</FileVersion>
+    <InformationalVersion>1.5.0</InformationalVersion>
   </PropertyGroup>
 
   <!-- 警告当错误：nullable / 未使用变量这类问题在 PR 里就会被拦下来。

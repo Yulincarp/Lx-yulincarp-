@@ -121,8 +121,8 @@ Write-Host "Manifest: $manifestPath"
 Write-Host "Files: $filesPath（$($fileEntries.Count) 个文件）"
 
 # 发布页附一份校验清单：玩家下完可以直接 certutil/Get-FileHash 对一下。
-# 包含 zip、Setup、update.json，以及本地构建过的 APK（CI 不构建 APK，没有就跳过）。
-$checksumFiles = @($zip, $setup, $manifestPath)
+# 包含 zip、Setup、update.json、files.json，以及本地构建过的 APK（CI 不构建 APK，没有就跳过）。
+$checksumFiles = @($zip, $setup, $manifestPath, $filesPath)
 $apk = Get-ChildItem (Join-Path $root "dist") -Filter "$slug-remote-$version.apk" -ErrorAction SilentlyContinue |
     Select-Object -First 1
 if ($apk) {
