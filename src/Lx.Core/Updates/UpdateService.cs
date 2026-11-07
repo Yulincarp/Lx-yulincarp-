@@ -182,17 +182,14 @@ public static class UpdateService
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
 
             string url = new Uri(new Uri(baseUrl), entry.Path).ToString();
-            string temp = destination + ".part";
-            await DownloadToAsync(url, temp, null, cancellationToken).ConfigureAwait(false);
+            await DownloadToFileAsync(url, destination, null, cancellationToken).ConfigureAwait(false);
 
-            string actual = Sha256Of(temp);
+            string actual = Sha256Of(destination);
             if (!string.Equals(actual, entry.Sha256, StringComparison.OrdinalIgnoreCase))
             {
-                TryDelete(temp);
+                TryDelete(destination);
                 throw new InvalidOperationException($"{entry.Path} 校验失败（期望 {entry.Sha256[..12]}…）");
             }
-
-            File.Move(temp, destination, overwrite: true);
             done++;
             progress?.Report((double)done / total);
         }
@@ -221,17 +218,14 @@ public static class UpdateService
 
         if (!zipValid)
         {
-            string temp = zipPath + ".part";
-            await DownloadToAsync(info.Url, temp, progress, cancellationToken).ConfigureAwait(false);
+            await DownloadToFileAsync(info.Url, zipPath, progress, cancellationToken).ConfigureAwait(false);
 
-            string actual = Sha256Of(temp);
+            string actual = Sha256Of(zipPath);
             if (!string.Equals(actual, info.Sha256, StringComparison.OrdinalIgnoreCase))
             {
-                TryDelete(temp);
+                TryDelete(zipPath);
                 throw new InvalidOperationException($"更新包 sha256 不符（期望 {info.Sha256[..12]}…，实际 {actual[..12]}…）");
             }
-
-            File.Move(temp, zipPath, overwrite: true);
         }
 
         string staging = Path.Combine(updatesDir, "staging-" + info.Version);
@@ -293,6 +287,49 @@ public static class UpdateService
         }
 
         return await Http.GetStringAsync(url, cancellationToken).ConfigureAwait(false);
+    }
+
+    // 下载到目标路径：先写临时文件，成功后原子改名；失败一定清掉临时文件。
+    //
+    // 为什么要绕这一圈：上一版直接把 .part 当目标写，失败后文件可能还被别的句柄占着
+    // （杀软扫描、外部删除造成的"等待删除"状态），下一次 File.Create 就会报
+    // "being used by another process"。现在先探测能不能删，删不掉就换个临时名。
+    private static async Task DownloadToFileAsync(
+        string url,
+        string destination,
+        IProgress<double>? progress,
+        CancellationToken cancellationToken)
+    {
+        string temp = CreateTempPath(destination);
+        try
+        {
+            await DownloadToAsync(url, temp, progress, cancellationToken).ConfigureAwait(false);
+            File.Move(temp, destination, overwrite: true);
+        }
+        catch
+        {
+            TryDelete(temp);
+            throw;
+        }
+    }
+
+    // 尽量复用 "<目标>.part"；如果它被占着就换一个带随机后缀的临时名，绝不硬闯。
+    public static string CreateTempPath(string destination)
+    {
+        string preferred = destination + ".part";
+        try
+        {
+            if (File.Exists(preferred))
+            {
+                File.Delete(preferred);
+            }
+
+            return preferred;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return $"{destination}.{Guid.NewGuid():N}.part";
+        }
     }
 
     private static async Task DownloadToAsync(
