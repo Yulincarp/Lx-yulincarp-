@@ -80,6 +80,24 @@ if ([string]::IsNullOrWhiteSpace($Notes)) {
 }
 
 $manifestName = if ($Channel -eq "beta") { "update-beta.json" } else { "update.json" }
+$filesName = if ($Channel -eq "beta") { "files-beta.json" } else { "files.json" }
+
+# 差量更新清单：发布目录里每个文件的相对路径 + sha256 + 大小。
+# 客户端拿它和本地文件比对，只下变化的那些；没有这份清单就退回整包。
+$publishDir = $out
+$fileEntries = @(
+    Get-ChildItem -LiteralPath $publishDir -Recurse -File | Sort-Object FullName | ForEach-Object {
+        [ordered]@{
+            # PS 5.1 的 .NET Framework 没有 Path.GetRelativePath，手动截断
+            path = $_.FullName.Substring($publishDir.Length).TrimStart('\', '/').Replace('\', '/')
+            sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()
+            size = $_.Length
+        }
+    }
+)
+$filesManifest = [ordered]@{ version = $version; files = $fileEntries } | ConvertTo-Json -Depth 6
+$filesPath = Join-Path $root "dist\$filesName"
+[System.IO.File]::WriteAllText($filesPath, $filesManifest, [System.Text.UTF8Encoding]::new($false))
 $effectiveMinVersion = if ([string]::IsNullOrWhiteSpace($MinVersion)) { $version } else { $MinVersion }
 
 $manifest = [ordered]@{
@@ -89,6 +107,7 @@ $manifest = [ordered]@{
     notes = $Notes
     minVersion = $effectiveMinVersion
     channel = $Channel
+    files = "$baseUrl/$filesName"
 } | ConvertTo-Json -Depth 5
 
 $manifestPath = Join-Path $root "dist\$manifestName"
@@ -99,6 +118,7 @@ Write-Host "ZIP: $zip"
 Write-Host "SETUP: $setup"
 Write-Host "SHA256: $hash"
 Write-Host "Manifest: $manifestPath"
+Write-Host "Files: $filesPath（$($fileEntries.Count) 个文件）"
 
 # 发布页附一份校验清单：玩家下完可以直接 certutil/Get-FileHash 对一下。
 # 包含 zip、Setup、update.json，以及本地构建过的 APK（CI 不构建 APK，没有就跳过）。

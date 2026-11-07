@@ -167,7 +167,34 @@ public partial class SettingsWindow : Window
             }
 
             var progress = new Progress<double>(p => HintText.Text = L10n.T("S249", p));
-            StagedUpdate staged = await UpdateService.DownloadAsync(info, _installRoot, progress);
+
+            // 有 files.json 就先试差量：只下变化的文件，失败再退回整包。
+            StagedUpdate staged;
+            if (!string.IsNullOrWhiteSpace(info.FilesUrl))
+            {
+                try
+                {
+                    DeltaPlan plan = await UpdateService.PlanDeltaAsync(info.FilesUrl, AppContext.BaseDirectory);
+                    if (plan.Download.Count == 0)
+                    {
+                        HintText.Text = L10n.T("S257", AppInfo.Version);
+                        return;
+                    }
+
+                    staged = await UpdateService.DownloadDeltaAsync(info, AppContext.BaseDirectory, plan, progress);
+                }
+                catch (Exception ex) when (ex is System.Net.Http.HttpRequestException
+                                             or InvalidOperationException
+                                             or System.IO.IOException)
+                {
+                    HintText.Text = L10n.T("S233");
+                    staged = await UpdateService.DownloadAsync(info, _installRoot, progress);
+                }
+            }
+            else
+            {
+                staged = await UpdateService.DownloadAsync(info, _installRoot, progress);
+            }
 
             MessageBoxResult apply = MessageBox.Show(
                 L10n.T("S294"),
