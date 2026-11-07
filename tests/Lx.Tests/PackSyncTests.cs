@@ -420,6 +420,15 @@ public class PackSyncTests
         Assert.Equal(
             new[] { "--server", "mc.example.com", "--port", "25566" },
             PackServerInfo.Parse("mc.example.com:25566").ToGameArgs());
+
+        // 默认端口不传 --port：显式端口会让客户端跳过 SRV 查询，
+        // 而 SRV 是"地址写死成域名、端口由 DNS 决定"的唯一手段。
+        Assert.Equal(
+            new[] { "--server", "mc.example.com" },
+            PackServerInfo.Parse("mc.example.com").ToGameArgs());
+        Assert.Equal(
+            new[] { "--server", "mc.example.com" },
+            PackServerInfo.Parse("mc.example.com:25565").ToGameArgs());
     }
 
     [Fact]

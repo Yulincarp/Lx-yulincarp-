@@ -15,10 +15,13 @@ public sealed record PackFileEntry(string Path, string Sha1, long Size, string? 
 }
 
 // 一键进服用的服务器信息；Port 缺省 25565。
-public sealed record PackServerInfo(string Address, int Port = 25565)
+public sealed record PackServerInfo(string Address, int Port = PackServerInfo.DefaultPort)
 {
+    // Minecraft 默认端口；SRV 只在端口"缺省"时才被客户端查询。
+    public const int DefaultPort = 25565;
+
     [JsonIgnore]
-    public string Display => Port == 25565 ? Address : $"{Address}:{Port}";
+    public string Display => Port == DefaultPort ? Address : $"{Address}:{Port}";
 
     // 支持 "mc.example.com" / "mc.example.com:25566" / "[::1]:25566"。
     public static PackServerInfo Parse(string? text)
@@ -58,13 +61,19 @@ public sealed record PackServerInfo(string Address, int Port = 25565)
     private static bool IsValidPort(int port) => port is > 0 and <= 65535;
 
     // 一键进服：Minecraft 客户端认的是 --server + --port 两个独立参数。
-    public IReadOnlyList<string> ToGameArgs() => new[]
-    {
-        "--server",
-        Address,
-        "--port",
-        Port.ToString(System.Globalization.CultureInfo.InvariantCulture),
-    };
+    //
+    // 默认端口 25565 时不传 --port：显式端口会让客户端跳过 SRV（_minecraft._tcp）查询，
+    // 而 SRV 正是"地址写死成域名、实际端口由 DNS 决定"的唯一办法。不传时客户端默认 25565，
+    // 与显式传 25565 行为一致，只是多留了一次 SRV 查询机会。
+    public IReadOnlyList<string> ToGameArgs() => Port == DefaultPort
+        ? new[] { "--server", Address }
+        : new[]
+        {
+            "--server",
+            Address,
+            "--port",
+            Port.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        };
 }
 
 // pack.json v1：一个实例"由哪个整合包管理"的记录，同时也是静态托管给客户端读的清单。
