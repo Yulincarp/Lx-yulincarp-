@@ -15,7 +15,8 @@ using Lx.Probe.Sync;
 // 参数：--list / --version <id> / --root <dir> / --game-dir <dir> / --loader fabric
 //       --auth offline|yggdrasil|microsoft / --name / --api / --email / --client-id
 //       --accounts / --account <名字> / --mods list|enable|disable|add|remove
-//       --pack-export --out <dir> / --pack-sync <url|dir> [--pack-dry-run]
+//       --pack-export --out <dir> [--pack-sign-key <key.json>] / --pack-keygen <key.json>
+//       --pack-sync <url|dir> [--pack-dry-run]
 //       --pack-rollback [--snapshot <id>] / --snapshots / --server <host[:port]>
 string? rootArg = null;
 string? versionArg = null;
@@ -44,6 +45,8 @@ bool debug = false;
 bool relogin = false;
 bool migrateOverwrite = false;
 string? packOutArg = null;
+string? packKeygenArg = null;
+string? packSignKeyArg = null;
 string? packVersionArg = null;
 string? packNameArg = null;
 string? packSyncArg = null;
@@ -166,6 +169,16 @@ for (int i = 0; i < args.Length; i++)
     else if (arg == "--pack-export")
     {
         packExportFlag = true;
+    }
+    else if (arg == "--pack-keygen")
+    {
+        packKeygenArg = i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal)
+            ? args[++i]
+            : "pack-signing-key.json";
+    }
+    else if (arg == "--pack-sign-key" && i + 1 < args.Length)
+    {
+        packSignKeyArg = args[++i];
     }
     else if (arg == "--pack-sync" && i + 1 < args.Length)
     {
@@ -452,6 +465,25 @@ if (packRollbackFlag)
     }
 }
 
+if (packKeygenArg is not null)
+{
+    try
+    {
+        PackSigningKey pair = PackSigning.CreateKeyPair();
+        string path = Path.GetFullPath(packKeygenArg);
+        File.WriteAllText(path, JsonSerializer.Serialize(pair, new JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine($"已生成签名密钥：{path}");
+        Console.WriteLine($"公钥（给客户端核对用）：{pair.PublicKey}");
+        Console.WriteLine("私钥务必保管好，别提交到仓库，也别发给玩家。");
+        return 0;
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+    {
+        Console.WriteLine($"[错误] {ex.Message}");
+        return 1;
+    }
+}
+
 if (packExportFlag)
 {
     if (gameDirArg is null || packOutArg is null)
@@ -463,13 +495,35 @@ if (packExportFlag)
     try
     {
         Instance? instance = FindInstanceForDir(gameDirArg);
+
+        PackSigningKey? signingKey = null;
+        if (packSignKeyArg is not null)
+        {
+            string keyPath = Path.GetFullPath(packSignKeyArg);
+            if (!File.Exists(keyPath))
+            {
+                Console.WriteLine($"[错误] 找不到签名密钥：{keyPath}");
+                return 1;
+            }
+
+            signingKey = JsonSerializer.Deserialize<PackSigningKey>(
+                File.ReadAllText(keyPath),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (signingKey is null || string.IsNullOrWhiteSpace(signingKey.PrivateKey))
+            {
+                Console.WriteLine("[错误] 密钥文件格式不对，应该由 --pack-keygen 生成");
+                return 1;
+            }
+        }
+
         var exportOptions = new PackExportOptions(
             PackName: packNameArg ?? instance?.Name,
             PackVersion: packVersionArg ?? DateTime.Now.ToString("yyyy.MM.dd"),
             MinecraftVersion: versionArg ?? instance?.VersionId,
             Loader: loaderArg ?? instance?.Loader,
             LoaderVersion: loaderVersionArg ?? instance?.LoaderVersion,
-            Server: serverArg is null ? null : PackServerInfo.Parse(serverArg));
+            Server: serverArg is null ? null : PackServerInfo.Parse(serverArg),
+            SigningKey: signingKey);
 
         PackExportResult exportResult = PackExporter.Export(gameDirArg, packOutArg, exportOptions, Console.WriteLine);
         Console.WriteLine($"导出 {exportResult.FileCount} 个文件，{exportResult.TotalBytes / 1024.0 / 1024.0:F1} MB");

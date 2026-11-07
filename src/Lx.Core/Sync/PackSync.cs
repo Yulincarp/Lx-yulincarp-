@@ -197,6 +197,22 @@ public static class PackSync
     {
         onProgress?.Invoke(new PackSyncProgress(SyncPhase.Loading, $"读取清单：{manifestLocation}"));
         PackManifest remote = await LoadRemoteAsync(manifestLocation, cancellationToken).ConfigureAwait(false);
+
+        // 签名校验放在最前面：清单被改过就一个字节都别下。
+        if (PackSigning.IsSigned(remote))
+        {
+            if (!PackSigning.Verify(remote, out string signatureError))
+            {
+                throw new InvalidOperationException($"整合包签名校验失败，已拒绝同步：{signatureError}");
+            }
+
+            onProgress?.Invoke(new PackSyncProgress(SyncPhase.Loading, "清单签名校验通过"));
+        }
+        else
+        {
+            onProgress?.Invoke(new PackSyncProgress(SyncPhase.Loading, "提示：这个整合包没有签名"));
+        }
+
         string baseUrl = ResolveBaseUrl(manifestLocation);
         onProgress?.Invoke(new PackSyncProgress(SyncPhase.Loading, $"清单版本 {remote.PackVersion}（{remote.Entries.Count} 个文件）"));
 

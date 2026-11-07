@@ -115,6 +115,17 @@ public sealed record PackManifest
     // 作者显式要求删除的文件（上一版有、这一版没有的，客户端也会自己算出来）。
     public List<string> Delete { get; init; } = new();
 
+    // 签名三件套：签名值、签名者公钥（DER/SPKI 的 base64）、算法名。
+    // 都是可选的：老清单没有这三个字段，读取端按"未签名"处理。
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Signature { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SignerKey { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SignatureAlgorithm { get; init; }
+
     // v0 清单一个哈希都没有；这种情况下同步只按"文件在不在"判断，不反复重下。
     [JsonIgnore]
     public bool IsLegacy => !AllEntries.Any(entry => entry.HasHash);

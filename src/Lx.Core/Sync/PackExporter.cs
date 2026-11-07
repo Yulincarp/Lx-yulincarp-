@@ -12,7 +12,8 @@ public sealed record PackExportOptions(
     string? LoaderVersion = null,
     PackServerInfo? Server = null,
     PackFilter? Filter = null,
-    bool CopyFiles = true);
+    bool CopyFiles = true,
+    PackSigningKey? SigningKey = null);
 
 public sealed record PackExportResult(
     PackManifest Manifest,
@@ -97,6 +98,12 @@ public static class PackExporter
             // 上一版导出过、这一版没有的文件：从输出目录删掉，避免托管方带着过期文件。
             int removed = RemoveStale(target, manifest, log);
             log?.Invoke($"导出完成：{manifest.Entries.Count} 个文件，{copied / 1024.0 / 1024.0:F1} MB，清理旧文件 {removed} 个");
+        }
+
+        if (options.SigningKey is not null)
+        {
+            manifest = PackSigning.Sign(manifest, options.SigningKey);
+            log?.Invoke("清单已签名（" + PackSigning.Algorithm + "）");
         }
 
         string manifestPath = PackManifest.PathFor(target);
