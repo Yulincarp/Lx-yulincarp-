@@ -50,9 +50,10 @@ jobs:
             (Get-ChildItem dist/Lx-*-win-x64.zip -ErrorAction SilentlyContinue),
             (Get-ChildItem dist/Lx-*-Setup.exe -ErrorAction SilentlyContinue),
             (Get-ChildItem dist/update*.json -ErrorAction SilentlyContinue),
-            (Get-Item dist/sha256.txt -ErrorAction SilentlyContinue)
+            (Get-Item dist/sha256.txt -ErrorAction SilentlyContinue),
+            (Get-Item dist/files*.json -ErrorAction SilentlyContinue)
           ) | Where-Object { $_ }
-          if ($files.Count -lt 4) {
+          if ($files.Count -lt 5) {
             throw "发布产物不完整：找到 $($files.Count) 个（期望 zip / Setup / update.json / sha256.txt）"
           }
           Get-Content dist/sha256.txt
@@ -67,6 +68,7 @@ jobs:
             dist/Lx-*-Setup.exe
             dist/Lx-*-remote-*.apk
             dist/update*.json
+            dist/files*.json
             dist/sha256.txt
 
       # overwrite_files 默认 true：重跑时同名资产直接替换，不会因为"已存在"失败
@@ -83,4 +85,5 @@ jobs:
             dist/Lx-*-Setup.exe
             dist/Lx-*-remote-*.apk
             dist/update*.json
+            dist/files*.json
             dist/sha256.txt
